@@ -4,20 +4,25 @@
 
 :root {
   color-scheme: dark;
-  --bg: #12181f;
-  --panel: #1b2330;
-  --line: #2c3747;
-  --muted: #8995a7;
-  --gold: #ffb800;
-  --cyan: #00e5ff;
+  --bg: #080c14;
+  --panel: #101725;
+  --line: #263248;
+  --muted: #9aa8bd;
+  --gold: #f59e0b;
+  --cyan: #06b6d4;
+  --accent: #f59e0b;
+  --accent-rgb: 245, 158, 11;
 }
 * {
   box-sizing: border-box;
 }
 body {
   margin: 0;
-  background: var(--bg);
-  color: #edf2f7;
+  background:
+    radial-gradient(ellipse at 12% 0%, #14233a66, transparent 38%),
+    radial-gradient(ellipse at 88% 100%, #24154744, transparent 34%),
+    var(--bg);
+  color: #f1f5fb;
   font-family: var(--font-cairo), var(--font-inter), Tahoma, sans-serif;
   font-size: 16px;
   line-height: 1.75;
@@ -32,7 +37,7 @@ button {
   cursor: pointer;
 }
 ::selection {
-  background: #ffb80055;
+  background: color-mix(in srgb, var(--accent) 38%, transparent);
 }
 ::-webkit-scrollbar {
   width: 8px;
@@ -43,16 +48,31 @@ button {
   border-radius: 8px;
 }
 .glass {
-  background: linear-gradient(145deg, #1c2634, #171f2b);
-  border: 1px solid #2b3747;
-  box-shadow: 0 12px 28px #070b1125;
+  background:
+    radial-gradient(ellipse at 100% 0%, #ffffff08, transparent 48%),
+    linear-gradient(145deg, #141e2e, #0f1724);
+  border: 1px solid #29364b;
+  box-shadow: 0 14px 36px #02050b66;
+  transition:
+    transform 300ms ease-out,
+    border-color 300ms ease-out,
+    box-shadow 300ms ease-out,
+    background 300ms ease-out;
+}
+.glass:hover {
+  border-color: color-mix(in srgb, var(--accent) 46%, #29364b);
+  background:
+    radial-gradient(ellipse at 100% 0%, color-mix(in srgb, var(--accent) 12%, transparent), transparent 55%),
+    linear-gradient(145deg, #172235, #101927);
+  box-shadow: 0 0 25px rgba(var(--accent-rgb), 0.18), 0 18px 42px #02050b75;
 }
 .nav-link {
-  transition: 0.2s ease;
+  transition: all 300ms ease-out;
 }
 .nav-link:hover {
-  background: #ffffff0a;
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
   color: #fff;
+  box-shadow: 0 0 20px rgba(var(--accent-rgb), 0.12);
 }
 .input {
   width: 100%;
@@ -62,11 +82,11 @@ button {
   color: #eef2f7;
   padding: 11px 13px;
   outline: none;
-  transition: 0.2s;
+  transition: all 300ms ease-out;
 }
 .input:focus {
-  border-color: #ffb800;
-  box-shadow: 0 0 0 3px #ffb80018;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(var(--accent-rgb), 0.16), 0 0 20px rgba(var(--accent-rgb), 0.12);
 }
 .input::placeholder {
   color: #6e7b8e;
@@ -75,7 +95,7 @@ button {
   border-radius: 10px;
   padding: 10px 14px;
   font-weight: 700;
-  transition: 0.18s;
+  transition: all 300ms ease-out;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -83,12 +103,13 @@ button {
 }
 .btn-gold {
   color: #18140a;
-  background: linear-gradient(135deg, #ffd050, #ffb800);
-  box-shadow: 0 6px 18px #ffb80022;
+  background: linear-gradient(135deg, color-mix(in srgb, var(--accent) 72%, white), var(--accent));
+  box-shadow: 0 6px 18px rgba(var(--accent-rgb), 0.18);
 }
 .btn-gold:hover {
   filter: brightness(1.08);
-  transform: translateY(-1px);
+  transform: translateY(-2px);
+  box-shadow: 0 0 24px rgba(var(--accent-rgb), 0.32);
 }
 .btn-muted {
   color: #dbe2eb;
@@ -96,12 +117,20 @@ button {
   border: 1px solid #38465b;
 }
 .btn-muted:hover {
-  background: #303e52;
+  background: #334258;
+  border-color: color-mix(in srgb, var(--accent) 45%, #38465b);
+  box-shadow: 0 0 18px rgba(var(--accent-rgb), 0.12);
+  transform: translateY(-1px);
 }
 .btn-danger {
   color: #ff7c98;
   background: #4a1d2b;
   border: 1px solid #6b293d;
+  transition: all 300ms ease-out;
+}
+.btn-danger:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 0 20px #fb456633;
 }
 .badge {
   display: inline-flex;
@@ -196,7 +225,7 @@ button:disabled {
   cursor: wait;
 }
 :focus-visible {
-  outline: 2px solid #ffb800;
+  outline: 2px solid var(--accent);
   outline-offset: 4px;
 }
 .auth-screen {
@@ -204,7 +233,10 @@ button:disabled {
   display: grid;
   place-items: center;
   padding: 24px;
-  background: radial-gradient(ellipse at top, #293446, #0d141e 65%);
+  background:
+    radial-gradient(ellipse at 50% 8%, #17304a99, transparent 45%),
+    radial-gradient(ellipse at 50% 100%, #2b174d55, transparent 40%),
+    #080c14;
 }
 .auth-card {
   width: min(480px, 100%);
@@ -217,7 +249,7 @@ button:disabled {
   width: 52px;
   height: 52px;
   border-radius: 16px;
-  background: #ffb800;
+  background: #f59e0b;
   color: #12181f;
 }
 .app-sidebar {
@@ -227,8 +259,8 @@ button:disabled {
   width: 275px;
   height: 100dvh;
   padding: 28px 20px;
-  background: #151d29;
-  border-left: 1px solid #354256;
+  background: linear-gradient(180deg, #101827, #0b111c);
+  border-left: 1px solid #263248;
   display: flex;
   flex-direction: column;
   overflow: auto;
@@ -242,9 +274,10 @@ button:disabled {
   color: #c1cbda;
 }
 .app-sidebar .active {
-  background: #ffb80018;
-  color: #ffd05b;
-  border: 1px solid #ffb80045;
+  background: rgba(var(--accent-rgb), 0.12);
+  color: var(--accent);
+  border: 1px solid rgba(var(--accent-rgb), 0.34);
+  box-shadow: inset 0 0 20px rgba(var(--accent-rgb), 0.06), 0 0 18px rgba(var(--accent-rgb), 0.1);
 }
 .workspace {
   margin-right: 275px;
@@ -254,11 +287,15 @@ button:disabled {
 .stats-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 18px;
+  gap: 20px;
 }
 .stat-card {
-  padding: 24px;
-  border-radius: 18px;
+  padding: 26px;
+  border-radius: 20px;
+}
+.stat-card strong,
+.app-shell .text-gold {
+  color: var(--accent);
 }
 .ticket-grid {
   display: grid;
@@ -266,13 +303,12 @@ button:disabled {
   gap: 20px;
 }
 .ticket-card {
-  padding: 24px;
-  border-radius: 18px;
-  transition: transform 0.15s;
+  padding: 26px;
+  border-radius: 20px;
 }
 .ticket-card:hover {
-  transform: translateY(-3px);
-  border-color: #64748b;
+  transform: translateY(-4px);
+  border-color: rgba(var(--accent-rgb), 0.58);
 }
 .form-grid,
 .receipt-grid {
@@ -339,6 +375,92 @@ th {
 code {
   font-family: var(--font-mono), Consolas, monospace;
   font-variant-numeric: tabular-nums;
+  letter-spacing: 0.015em;
+}
+
+.app-shell {
+  --accent: #f59e0b;
+  --accent-rgb: 245, 158, 11;
+  min-height: 100vh;
+  position: relative;
+  isolation: isolate;
+}
+.app-shell::before {
+  position: fixed;
+  z-index: -1;
+  inset: 0;
+  content: "";
+  pointer-events: none;
+  background:
+    radial-gradient(ellipse at 72% 5%, rgba(var(--accent-rgb), 0.08), transparent 32%),
+    radial-gradient(ellipse at 2% 92%, rgba(var(--accent-rgb), 0.045), transparent 30%);
+}
+.theme-admin {
+  --accent: #f59e0b;
+  --accent-rgb: 245, 158, 11;
+}
+.theme-reception {
+  --accent: #06b6d4;
+  --accent-rgb: 6, 182, 212;
+}
+.theme-diagnosis-desk {
+  --accent: #a855f7;
+  --accent-rgb: 168, 85, 247;
+}
+.theme-desk-1 {
+  --accent: #3b82f6;
+  --accent-rgb: 59, 130, 246;
+}
+.theme-desk-2 {
+  --accent: #10b981;
+  --accent-rgb: 16, 185, 129;
+}
+.theme-desk-3 {
+  --accent: #ec4899;
+  --accent-rgb: 236, 72, 153;
+}
+.theme-desk-4 {
+  --accent: #8b5cf6;
+  --accent-rgb: 139, 92, 246;
+}
+.theme-desk-5 {
+  --accent: #f97316;
+  --accent-rgb: 249, 115, 22;
+}
+.theme-desk-6 {
+  --accent: #14b8a6;
+  --accent-rgb: 20, 184, 166;
+}
+.app-shell .btn,
+.app-shell .ticket-card,
+.app-shell .stat-card,
+.app-shell .nav-link,
+.app-shell button {
+  transition: all 300ms ease-out;
+}
+.app-shell .brand-mark {
+  background: var(--accent);
+  box-shadow: 0 0 24px rgba(var(--accent-rgb), 0.26);
+}
+.app-sidebar p.font-mono {
+  color: color-mix(in srgb, var(--accent) 72%, #aab6c8);
+}
+.app-shell .ticket-card:focus-visible,
+.app-shell .btn:focus-visible {
+  outline-color: var(--accent);
+}
+.app-shell .error-box {
+  box-shadow: 0 0 22px #fb456622;
+}
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }
 @media (max-width: 1100px) {
   .stats-grid {
@@ -384,6 +506,9 @@ code {
   }
   .stats-grid {
     gap: 10px;
+  }
+  .ticket-grid {
+    gap: 14px;
   }
   .stat-card {
     padding: 18px;

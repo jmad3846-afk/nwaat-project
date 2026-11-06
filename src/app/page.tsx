@@ -176,6 +176,10 @@ export default function Home() {
     reception = admin || user.role === "RECEPTION",
     diagnosis = admin || user.role === "DIAGNOSIS_DESK",
     tech = user.role === "TECHNICIAN_DESK";
+  const themeClass =
+    user.role === "TECHNICIAN_DESK"
+      ? `theme-desk-${((user.desk_id ?? 1) - 1) % 6 + 1}`
+      : `theme-${user.role.toLowerCase().replaceAll("_", "-")}`;
   const menu = [
     ["tickets", tech ? "طاولة العمل" : "لوحة الطلبات"],
     ...(reception
@@ -205,7 +209,7 @@ export default function Home() {
         .includes(search.toLowerCase()),
   );
   return (
-    <div className="app-shell" dir="rtl">
+    <div className={`app-shell ${themeClass}`} dir="rtl">
       <aside className="app-sidebar">
         <div className="flex items-center gap-3 mb-9">
           <div className="brand-mark">
