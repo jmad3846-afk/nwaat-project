@@ -1,98 +1,1087 @@
-'use client'
-
-import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Activity, AlertTriangle, Archive, ArrowDownLeft, ArrowUpLeft, Bell, Check, CheckCircle2, ChevronDown, CircleDollarSign, Clock3, ClipboardList, Cpu, Gauge, HardDrive, LayoutDashboard, LogOut, Menu, MessageCircle, Package, Plus, Printer, QrCode, Search, Settings2, ShieldCheck, Smartphone, Trash2, UserRound, Users, Wrench, X, Zap } from 'lucide-react'
-import { QRCodeSVG } from 'qrcode.react'
-
-type Status = 'diagnosis'|'approval'|'repair'|'ready'
-type Service = { name:string; price:number }
-type Device = { id:string; customer:string; phone:string; passcode:string; brand:string; model:string; imei:string; issue:string; diagnosis?:string; kind:'instant'|'standard'; repairType?:'normal'|'fast'; approved?:boolean; status:Status; cost:number; services:Service[]; requestedParts:{name:string;cost:number}[]; created:number; expected:number; code:string; desk:string; technician:string; unlocked:boolean; usedParts:string[]; closed?:boolean }
-type Part = {id:string;name:string;sku:string;qty:number;min:number;price:number}
-type Desk = {id:string;name:string;tech:string;active:boolean}
-type Staff = {id:string;name:string;phone:string;specialty:string;active:boolean}
-type Tab = 'overview'|'intake'|'workbench'|'inventory'|'delivery'|'team'|'tracking'
-const initialParts:Part[]=[{id:'p1',name:'شاشة iPhone 13',sku:'SCR-013',qty:8,min:3,price:95},{id:'p2',name:'بطارية Samsung S22',sku:'BAT-S22',qty:5,min:2,price:42},{id:'p3',name:'منفذ شحن Type-C',sku:'CHG-C01',qty:12,min:4,price:12},{id:'p4',name:'آيسي باور عام',sku:'IC-PWR',qty:3,min:2,price:28},{id:'p5',name:'فلاتة شاشة iPhone 12',sku:'FLX-012',qty:1,min:2,price:18}]
-const initialDesks:Desk[]=[{id:'d1',name:'طاولة 01',tech:'أحمد الخطيب',active:true},{id:'d2',name:'طاولة 02',tech:'سارة العلي',active:true},{id:'d3',name:'طاولة 03',tech:'غير مخصص',active:true}]
-const initialStaff:Staff[]=[{id:'s1',name:'أحمد الخطيب',phone:'',specialty:'هواتف Apple',active:true},{id:'s2',name:'سارة العلي',phone:'',specialty:'Android',active:true},{id:'s3',name:'محمود حسن',phone:'',specialty:'لوحات إلكترونية',active:false}]
-const statusLabel:Record<Status,string>={diagnosis:'قيد التشخيص',approval:'بانتظار موافقة العميل',repair:'قيد الإصلاح',ready:'جاهز للتسليم'}
-const statusStyle:Record<Status,string>={diagnosis:'bg-cyan-950 text-cyan-300 border border-cyan-900',approval:'bg-amber-950 text-amber-300 border border-amber-900',repair:'bg-blue-950 text-blue-300 border border-blue-900',ready:'bg-emerald-950 text-emerald-300 border border-emerald-900'}
-const uid=()=>Math.random().toString(36).slice(2,8).toUpperCase()
-const money=(n:number)=>new Intl.NumberFormat('ar-SY',{style:'currency',currency:'USD',maximumFractionDigits:0}).format(n)
-
-export default function Home(){
- const [tab,setTab]=useState<Tab>('overview'),[devices,setDevices]=useState<Device[]>([]),[parts,setParts]=useState<Part[]>(initialParts),[desks,setDesks]=useState<Desk[]>(initialDesks),[staff,setStaff]=useState<Staff[]>(initialStaff),[ready,setReady]=useState(false),[modal,setModal]=useState<'intake'|'receipt'|'part'|'desk'|'track'|'ticket'|null>(null),[selected,setSelected]=useState<Device|null>(null),[search,setSearch]=useState(''),[time,setTime]=useState(Date.now()),[notice,setNotice]=useState(''),[staffTab,setStaffTab]=useState<'desks'|'current'|'former'>('desks'),[mobileMenu,setMobileMenu]=useState(false)
- const [form,setForm]=useState({customer:'',phone:'',passcode:'',brand:'Apple',model:'',imei:'',issue:'',kind:'standard'})
- useEffect(()=>{try{const raw=localStorage.getItem('nawa-workshop');if(raw){const x=JSON.parse(raw);setDevices(x.devices||[]);setParts(x.parts||initialParts);setDesks(x.desks||initialDesks);setStaff(x.staff||initialStaff)}}catch{}setReady(true)},[])
- useEffect(()=>{if(!ready)return;const id=new URLSearchParams(window.location.search).get('track');if(!id)return;const device=devices.find(d=>d.id===id);if(device){setSelected(device);setTab('tracking');setModal('track')}},[ready,devices])
- useEffect(()=>{if(ready)localStorage.setItem('nawa-workshop',JSON.stringify({devices,parts,desks,staff}))},[ready,devices,parts,desks,staff])
- useEffect(()=>{const i=setInterval(()=>setTime(Date.now()),1000);return()=>clearInterval(i)},[])
- useEffect(()=>{if(notice){const i=setTimeout(()=>setNotice(''),3200);return()=>clearTimeout(i)}},[notice])
- const active=devices.filter(d=>!d.closed),diagnosisCount=active.filter(d=>d.status==='diagnosis').length,readyDevices=active.filter(d=>d.status==='ready')
- const filtered=useMemo(()=>active.filter(d=>`${d.customer} ${d.phone} ${d.brand} ${d.model} ${d.id}`.toLowerCase().includes(search.toLowerCase())),[active,search])
- const updateDevice=(id:string,patch:Partial<Device>)=>{setDevices(ds=>ds.map(d=>d.id===id?{...d,...patch}:d));setSelected(s=>s?.id===id?{...s,...patch}:s)}
- const createTicket=()=>{if(!form.customer||!form.phone||!form.passcode||!form.model||!form.issue){setNotice('يرجى تعبئة الحقول المطلوبة');return}const d:Device={id:`NW-${Date.now().toString().slice(-6)}`,customer:form.customer,phone:form.phone,passcode:form.passcode,brand:form.brand,model:form.model,imei:form.imei,issue:form.issue,kind:form.kind as 'instant'|'standard',status:'diagnosis',cost:0,services:[],requestedParts:[],created:Date.now(),expected:Date.now()+(form.kind==='instant'?4:24)*3600000,code:uid().slice(0,4),desk:'',technician:'',unlocked:false,usedParts:[]};setDevices(ds=>[d,...ds]);setSelected(d);setModal('receipt');setForm({customer:'',phone:'',passcode:'',brand:'Apple',model:'',imei:'',issue:'',kind:'standard'});setNotice('تم تسجيل الجهاز بنجاح')}
- const assignDesk=(d:Device,deskId:string)=>{const desk=desks.find(x=>x.id===deskId);if(!desk)return;updateDevice(d.id,{desk:desk.name,technician:desk.tech,status:'approval'});setSelected({...d,desk:desk.name,technician:desk.tech,status:'approval'});setNotice(`تم تحويل ${d.id} إلى ${desk.name}`)}
- const approve=(d:Device)=>{if(!d.desk){setNotice('عيّن طاولة فنية أولاً');return}updateDevice(d.id,{status:'repair',desk:d.desk,technician:d.technician});setNotice('وافق العميل، بدأ الإصلاح')}
- const consume=(deviceId:string,partId:string)=>{const p=parts.find(x=>x.id===partId);if(!p||p.qty<1)return;setParts(ps=>ps.map(x=>x.id===partId?{...x,qty:x.qty-1}:x));setDevices(ds=>ds.map(d=>d.id===deviceId?{...d,cost:d.cost+p.price,usedParts:[...d.usedParts,p.name]}:d));setNotice(`تم صرف ${p.name} من المخزون`)}
- const nav=(next:Tab)=>{setTab(next);setSearch('')}
- const menu:[Tab,string,any][]=[['overview','لوحة التحكم',LayoutDashboard],['intake','استقبال الأجهزة',Smartphone],['workbench','طاولات الفنيين',Wrench],['inventory','المخزون',Package],['delivery','أمانات التسليم',Archive],['team','الفريق والطاولات',Users],['tracking','تتبع العملاء',QrCode]]
- return <div className="min-h-screen bg-ink text-slate-100" dir="rtl">
-  <aside className="sidebar fixed right-0 top-0 z-20 flex h-screen w-[260px] flex-col border-l border-slate-700/50 bg-[#151c25] px-4 py-5">
-   <div className="mb-9 flex items-center gap-3 px-2"><div className="grid h-11 w-11 place-items-center rounded-xl bg-gold text-ink"><Cpu size={24}/></div><div><div className="text-lg font-black tracking-wide">نواة <span className="text-gold">للتقنية</span></div><div className="text-[10px] tracking-[.22em] text-slate-500">WORKSHOP OS</div></div></div>
-   <div className="mb-3 px-3 text-[10px] font-bold tracking-[.18em] text-slate-500">مساحة العمل</div>
-   <nav className="space-y-1">{menu.map(([id,label,Icon])=><button key={id} onClick={()=>nav(id)} className={`nav-link flex w-full items-center gap-3 rounded-xl px-3 py-3 text-right text-sm ${tab===id?'bg-gold/10 text-gold ring-1 ring-gold/20':'text-slate-400'}`}><Icon size={18}/><span className="flex-1">{label}</span>{id==='delivery'&&readyDevices.length>0&&<span className="rounded-full bg-emerald-400/15 px-2 py-0.5 text-[10px] text-emerald-300">{readyDevices.length}</span>}</button>)}</nav>
-   <div className="mt-auto rounded-2xl border border-slate-700 bg-[#101720] p-4"><div className="mb-3 flex items-center justify-between text-xs"><span className="text-slate-400">حالة النظام</span><span className="flex items-center gap-1.5 text-emerald-400"><span className="h-1.5 w-1.5 rounded-full bg-emerald-400"/>متصل</span></div><div className="text-xs font-bold">نواة للصيانة</div><div className="mt-1 text-[10px] text-slate-500">دمشق، سوريا · نسخة محلية</div></div>
-  </aside>
-  <main className="main-content mr-[260px] min-h-screen px-8 py-6 max-md:mr-0 max-md:px-4">
-   <header className="mb-7 flex items-center justify-between"><div className="flex items-center gap-3"><button onClick={()=>setMobileMenu(x=>!x)} className="hidden rounded-lg bg-panel p-2 text-slate-400 max-md:block"><Menu size={19}/></button><div><div className="text-xs text-slate-500">الأحد، ٢٥ تشرين الأول ٢٠٢٦ <span className="mx-2 text-slate-700">/</span> ورشة الصيانة الرئيسية</div><h1 className="mt-1 text-2xl font-black">{menu.find(m=>m[0]===tab)?.[1]}</h1></div></div><div className="flex items-center gap-3"><div className="hidden items-center gap-2 rounded-lg border border-slate-700 px-3 py-2 text-xs text-slate-400 md:flex"><span className="h-2 w-2 rounded-full bg-emerald-400"/>النظام يعمل بشكل طبيعي</div><button onClick={()=>setNotice(diagnosisCount>10?'تنبيه: أكثر من 10 أجهزة بانتظار التشخيص!':'لا توجد تنبيهات جديدة')} className="relative rounded-xl border border-slate-700 bg-panel p-2.5 text-slate-300"><Bell size={18}/>{diagnosisCount>10&&<span className="absolute -left-1 -top-1 h-2.5 w-2.5 rounded-full bg-crimson"/>}</button><div className="grid h-10 w-10 place-items-center rounded-xl border border-slate-700 bg-panel text-gold"><UserRound size={18}/></div></div></header>
-   {mobileMenu&&<nav className="mb-5 grid grid-cols-2 gap-2 rounded-2xl border border-slate-700 bg-[#151c25] p-3 md:hidden">{menu.map(([id,label,Icon])=><button key={id} onClick={()=>{nav(id);setMobileMenu(false)}} className={`flex items-center gap-2 rounded-xl px-3 py-3 text-xs ${tab===id?'bg-gold/10 text-gold':'text-slate-300'}`}><Icon size={16}/>{label}</button>)}</nav>}
-   {diagnosisCount>10&&<div className="mb-5 flex items-center gap-3 rounded-xl border border-amber-700/60 bg-amber-950/40 px-4 py-3 text-sm text-amber-200"><AlertTriangle size={18}/>تحذير: أكثر من 10 أجهزة بانتظار التشخيص! <span className="mr-auto text-xs text-amber-300/70">{diagnosisCount} جهاز</span></div>}
-   {tab==='overview'&&<Overview devices={active} parts={parts} desks={desks} setTab={nav} openIntake={()=>setModal('intake')} now={time}/>}
-   {tab==='intake'&&<Intake devices={filtered} search={search} setSearch={setSearch} open={()=>setModal('intake')} select={d=>{setSelected(d);setModal('ticket')}}/>}
-   {tab==='workbench'&&<Workbench devices={filtered} search={search} setSearch={setSearch} now={time} update={updateDevice} consume={consume} parts={parts} setTicket={d=>{setSelected(d);setModal('ticket')}}/>}
-   {tab==='inventory'&&<Inventory parts={parts} setParts={setParts} open={()=>setModal('part')} notify={setNotice}/>}
-   {tab==='delivery'&&<Delivery pending={readyDevices} delivered={devices.filter(d=>d.closed)} select={d=>{setSelected(d);setModal('ticket')}} close={d=>{updateDevice(d.id,{closed:true});setNotice(`تم إغلاق الطلب ${d.id}`)}}/>}
-   {tab==='team'&&<Team desks={desks} setDesks={setDesks} staff={staff} setStaff={setStaff} tab={staffTab} setTab={setStaffTab} openDesk={()=>setModal('desk')} notify={setNotice}/>}
-   {tab==='tracking'&&<Tracking devices={active} search={search} setSearch={setSearch} select={d=>{setSelected(d);setModal('track')}}/>}
-  </main>
-  {notice&&<div className="fixed bottom-5 left-5 z-[70] flex max-w-sm items-center gap-3 rounded-xl border border-slate-600 bg-[#202b3a] px-4 py-3 text-sm shadow-2xl"><CheckCircle2 size={18} className="shrink-0 text-emerald-400"/>{notice}<button onClick={()=>setNotice('')} className="mr-2 text-slate-500"><X size={16}/></button></div>}
-  {modal==='intake'&&<Modal title="تسجيل جهاز جديد" close={()=>setModal(null)}><IntakeForm form={form} setForm={setForm} submit={createTicket}/></Modal>}
-  {modal==='receipt'&&selected&&<Receipt device={selected} close={()=>setModal(null)} tracking={()=>{setModal('track')}}/>}
-  {modal==='part'&&<Modal title="إضافة قطعة للمخزون" close={()=>setModal(null)}><PartForm add={p=>{setParts(ps=>[...ps,p]);setModal(null);setNotice('تمت إضافة القطعة')}}/></Modal>}
-  {modal==='desk'&&<Modal title="إضافة طاولة فنية" close={()=>setModal(null)}><DeskForm add={d=>{setDesks(ds=>[...ds,d]);setModal(null);setNotice('تمت إضافة الطاولة')}} staff={staff.filter(s=>s.active)}/></Modal>}
-  {modal==='track'&&selected&&<TrackModal device={selected} close={()=>setModal(null)} now={time}/>}
-  {modal==='ticket'&&selected&&<TicketModal device={selected} close={()=>setModal(null)} now={time} desks={desks} assign={assignDesk} approve={approve} update={updateDevice} consume={consume} parts={parts} notify={setNotice}/>}
- </div>
+"use client";
+import { FormEvent, useCallback, useEffect, useState } from "react";
+import { Cpu, LogOut, RefreshCw, Printer, ShieldCheck } from "lucide-react";
+import { QRCodeSVG } from "qrcode.react";
+import {
+  api,
+  all,
+  token,
+  User,
+  Ticket,
+  Part,
+  Desk,
+  labels,
+  money,
+} from "../lib/api";
+type Receipt = {
+  ticket: Ticket;
+  part_a: { tracking_url: string };
+  part_b: { security_code: string };
+};
+export default function Home() {
+  const [user, setUser] = useState<User | null>(null),
+    [loading, setLoading] = useState(true),
+    [tab, setTab] = useState("tickets"),
+    [tickets, setTickets] = useState<Ticket[]>([]),
+    [parts, setParts] = useState<Part[]>([]),
+    [desks, setDesks] = useState<Desk[]>([]),
+    [staff, setStaff] = useState<User[]>([]),
+    [former, setFormer] = useState<User[]>([]),
+    [selected, setSelected] = useState<Ticket | null>(null),
+    [receipt, setReceipt] = useState<Receipt | null>(null),
+    [error, setError] = useState(""),
+    [busy, setBusy] = useState(false),
+    [search, setSearch] = useState(""),
+    [count, setCount] = useState(0);
+  const [technicians, setTechnicians] = useState<
+    { id: number; name: string; desk_id: number }[]
+  >([]);
+  const [settings, setSettings] = useState<{
+    name: string;
+    phone: string | null;
+    address: string | null;
+  } | null>(null);
+  const refresh = useCallback(async (u: User) => {
+    const sessionToken = token.get();
+    const [ts, ps, ds] = await Promise.all([
+      all<Ticket>("/tickets"),
+      all<Part>("/inventory"),
+      all<Desk>("/desks"),
+    ]);
+    if (!sessionToken || token.get() !== sessionToken) return;
+    setTickets(ts);
+    setParts(ps);
+    setDesks(ds);
+    if (u.role === "ADMIN") {
+      const [a, b] = await Promise.all([
+        all<User>("/staff?type=current"),
+        all<User>("/staff?type=former"),
+      ]);
+      setStaff(a);
+      setFormer(b);
+      setSettings(await api("/settings"));
+    }
+    if (u.role !== "TECHNICIAN_DESK") {
+      const q = await api<{ count: number }>("/tickets/diagnosis-queue");
+      setCount(q.count);
+      if (u.role === "ADMIN" || u.role === "RECEPTION")
+        setTechnicians(await api("/technicians"));
+    }
+  }, []);
+  useEffect(() => {
+    const reset = () => {
+      setUser(null);
+      setSelected(null);
+      setReceipt(null);
+      setTickets([]);
+      setParts([]);
+      setStaff([]);
+      setFormer([]);
+    };
+    window.addEventListener("nwaat:unauthorized", reset);
+    if (token.get())
+      api<User>("/auth/me")
+        .then((u) => {
+          setUser(u);
+          void refresh(u).catch((e) =>
+            setError(e instanceof Error ? e.message : "تعذر تحميل البيانات"),
+          );
+        })
+        .catch((e) => {
+          token.clear();
+          setError(e instanceof Error ? e.message : "تعذر التحقق من الجلسة");
+        })
+        .finally(() => setLoading(false));
+    else setLoading(false);
+    return () => window.removeEventListener("nwaat:unauthorized", reset);
+  }, [refresh]);
+  useEffect(() => {
+    if (!user) return;
+    const i = setInterval(
+      () => refresh(user).catch((e) => setError(e.message)),
+      15000,
+    );
+    return () => clearInterval(i);
+  }, [user, refresh]);
+  const run = async (fn: () => Promise<void>) => {
+    if (busy) return;
+    setBusy(true);
+    setError("");
+    try {
+      await fn();
+      if (user && token.get()) await refresh(user);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "تعذر تنفيذ العملية");
+    } finally {
+      setBusy(false);
+    }
+  };
+  const form =
+    (fn: (v: Record<string, FormDataEntryValue>) => Promise<void>) =>
+    (e: FormEvent<HTMLFormElement>) => {
+      e.preventDefault();
+      const v = Object.fromEntries(new FormData(e.currentTarget));
+      void run(() => fn(v));
+    };
+  const update = async (v: unknown) => {
+    if (!selected) return;
+    await api(`/tickets/${selected.id}/status`, "PUT", v);
+    setSelected(await api<Ticket>(`/tickets/${selected.id}`));
+  };
+  if (loading)
+    return <main className="auth-screen">جاري التحقق من الجلسة…</main>;
+  if (!user)
+    return (
+      <main className="auth-screen" dir="rtl">
+        <form
+          className="glass auth-card space-y-5"
+          onSubmit={form(async (v) => {
+            const r = await api<{ token: string; user: User }>(
+              "/auth/login",
+              "POST",
+              v,
+              true,
+            );
+            token.set(r.token);
+            setTab("tickets");
+            setUser(r.user);
+            await refresh(r.user);
+          })}
+        >
+          <div className="brand-mark">
+            <Cpu size={30} />
+          </div>
+          <h1 className="text-3xl font-black">
+            نواة <span className="text-gold">للصيانة</span>
+          </h1>
+          <p className="text-slate-300">تسجيل الدخول إلى مساحة العمل</p>
+          <Field label="البريد الإلكتروني" name="email" type="email" required />
+          <Field label="كلمة المرور" name="password" type="password" required />
+          {error && (
+            <p role="alert" className="error-box">
+              {error}
+            </p>
+          )}
+          <button disabled={busy} className="btn btn-gold w-full">
+            {busy ? "جاري الدخول…" : "تسجيل الدخول"}
+          </button>
+          <p className="text-sm text-slate-400">
+            <ShieldCheck className="inline ml-2" size={17} />
+            صلاحيات مرتبطة بالدور وطاولة العمل
+          </p>
+        </form>
+      </main>
+    );
+  const admin = user.role === "ADMIN",
+    reception = admin || user.role === "RECEPTION",
+    diagnosis = admin || user.role === "DIAGNOSIS_DESK",
+    tech = user.role === "TECHNICIAN_DESK";
+  const menu = [
+    ["tickets", tech ? "طاولة العمل" : "لوحة الطلبات"],
+    ...(reception
+      ? [
+          ["intake", "استلام جهاز"],
+          ["delivery", "جاهز للتسليم"],
+        ]
+      : []),
+    ...(diagnosis ? [["diagnosis", "مكتب التشخيص"]] : []),
+    ["inventory", "قطع الغيار"],
+    ...(admin
+      ? [
+          ["staff", "الفريق والطاولات"],
+          ["settings", "إعدادات النظام"],
+        ]
+      : []),
+  ];
+  const shown = tickets.filter(
+    (t) =>
+      (tab !== "diagnosis" ||
+        ["pending_diagnosis", "awaiting_customer_approval"].includes(
+          t.status,
+        )) &&
+      (tab !== "delivery" || t.status === "ready_for_delivery") &&
+      `${t.reference} ${t.customer_name} ${t.customer_phone} ${t.brand} ${t.model}`
+        .toLowerCase()
+        .includes(search.toLowerCase()),
+  );
+  return (
+    <div className="app-shell" dir="rtl">
+      <aside className="app-sidebar">
+        <div className="flex items-center gap-3 mb-9">
+          <div className="brand-mark">
+            <Cpu />
+          </div>
+          <div>
+            <strong className="text-2xl">
+              نواة <span className="text-gold">للتقنية</span>
+            </strong>
+            <p className="text-xs text-slate-400 tracking-widest mt-1">
+              WORKSHOP OS
+            </p>
+          </div>
+        </div>
+        <nav className="space-y-2">
+          {menu.map(([key, label]) => (
+            <button
+              key={key}
+              onClick={() => {
+                setTab(key);
+                setSelected(null);
+                setSearch("");
+              }}
+              className={`nav-link ${tab === key ? "active" : ""}`}
+            >
+              {label}
+            </button>
+          ))}
+        </nav>
+        <div className="mt-auto pt-8">
+          <p className="font-bold">{user.name}</p>
+          <p className="text-xs font-mono text-slate-400 my-2">
+            {user.role}
+            {user.desk_id ? ` · DESK ${user.desk_id}` : ""}
+          </p>
+          <button
+            className="btn btn-muted w-full"
+            onClick={() =>
+              void run(async () => {
+                await api("/auth/logout", "POST");
+                token.clear();
+                setUser(null);
+                setSelected(null);
+                setReceipt(null);
+                setTickets([]);
+                setParts([]);
+                setStaff([]);
+                setFormer([]);
+              })
+            }
+          >
+            <LogOut size={16} />
+            تسجيل الخروج
+          </button>
+        </div>
+      </aside>
+      <main className="workspace">
+        <header className="flex flex-wrap gap-4 items-center justify-between mb-7">
+          <div>
+            <p className="text-sm text-slate-400 mb-2">
+              {new Intl.DateTimeFormat("ar-SY", {
+                dateStyle: "full",
+                timeZone: "Asia/Damascus",
+              }).format(new Date())}
+            </p>
+            <h1 className="text-3xl font-black">
+              {menu.find((x) => x[0] === tab)?.[1]}
+            </h1>
+          </div>
+          <button
+            disabled={busy}
+            className="btn btn-muted"
+            onClick={() => void run(async () => {})}
+          >
+            <RefreshCw size={17} />
+            تحديث
+          </button>
+        </header>
+        {error && (
+          <div role="alert" className="error-box mb-5">
+            {error}
+          </div>
+        )}
+        {count > 10 && (
+          <div className="warning-box mb-5">
+            تحذير ضغط التشخيص: {count} جهازاً بانتظار التشخيص
+          </div>
+        )}
+        <div className="stats-grid mb-7">
+          {[
+            [
+              "الأجهزة النشطة",
+              tickets.filter(
+                (t) => !["delivered", "cancelled"].includes(t.status),
+              ).length,
+            ],
+            [
+              "قيد الإصلاح",
+              tickets.filter((t) => t.status === "in_repair").length,
+            ],
+            [
+              "جاهز للتسليم",
+              tickets.filter((t) => t.status === "ready_for_delivery").length,
+            ],
+            [
+              "مخزون منخفض",
+              parts.filter((p) => p.stock_quantity <= p.minimum_warning_limit)
+                .length,
+            ],
+          ].map(([label, value]) => (
+            <div className="glass stat-card" key={label}>
+              <p className="text-slate-300">{label}</p>
+              <strong className="text-4xl text-gold font-black block mt-4">
+                {value}
+              </strong>
+            </div>
+          ))}
+        </div>
+        {["tickets", "diagnosis", "delivery"].includes(tab) && (
+          <>
+            <input
+              aria-label="بحث الطلبات"
+              className="input mb-5"
+              placeholder="بحث باسم العميل أو الهاتف أو رقم الطلب…"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
+            <div className="ticket-grid">
+              {shown.map((t) => (
+                <button
+                  className="glass ticket-card text-right"
+                  key={t.id}
+                  onClick={() =>
+                    void run(async () => {
+                      setSelected(await api<Ticket>(`/tickets/${t.id}`));
+                    })
+                  }
+                >
+                  <div className="flex justify-between">
+                    <span className={`badge status-${t.status}`}>
+                      {labels[t.status]}
+                    </span>
+                    <span className="font-mono text-sm text-slate-400">
+                      #{t.id}
+                    </span>
+                  </div>
+                  <h2 className="text-xl font-extrabold mt-5">
+                    {t.brand} {t.model}
+                  </h2>
+                  <p className="mt-2 text-slate-300">{t.customer_name}</p>
+                  <p className="mt-3 text-sm text-slate-400">
+                    {t.reported_issue}
+                  </p>
+                  <div className="flex justify-between mt-5 border-t border-slate-700 pt-4">
+                    <strong className="text-gold">
+                      {money(Number(t.estimated_cost) + Number(t.parts_cost))}
+                    </strong>
+                    <Countdown due={t.delivery_due_at} />
+                  </div>
+                </button>
+              ))}
+            </div>
+            {!shown.length && (
+              <div className="glass p-10 text-center">
+                لا توجد طلبات في هذه القائمة
+              </div>
+            )}
+          </>
+        )}
+        {tab === "intake" && reception && (
+          <form
+            className="glass p-6 space-y-5"
+            onSubmit={form(async (v) => {
+              setReceipt(await api<Receipt>("/tickets", "POST", v));
+              setTab("tickets");
+            })}
+          >
+            <h2 className="text-xl font-bold">بيانات العميل والجهاز</h2>
+            <div className="form-grid">
+              <Field label="اسم العميل" name="customer_name" required />
+              <Field label="رقم الهاتف" name="customer_phone" required />
+              <Field label="الشركة" name="brand" required />
+              <Field label="الموديل" name="model" required />
+              <Field label="Serial / IMEI" name="serial_imei" />
+              <Field
+                label="رمز قفل الجهاز (اختياري)"
+                name="device_passcode"
+                type="password"
+              />
+              <label>
+                نوع الإصلاح
+                <select name="repair_type" className="input">
+                  <option value="standard">إصلاح عادي</option>
+                  <option value="instant">إصلاح فوري</option>
+                </select>
+              </label>
+            </div>
+            <label>
+              العطل المبلغ عنه
+              <textarea
+                name="reported_issue"
+                className="input"
+                required
+                maxLength={5000}
+              />
+            </label>
+            <button disabled={busy} className="btn btn-gold">
+              تسجيل الجهاز وإصدار الإيصال
+            </button>
+          </form>
+        )}
+        {tab === "inventory" && (
+          <div className="space-y-6">
+            {admin && (
+              <form
+                className="glass p-6 space-y-4"
+                onSubmit={form(async (v) => {
+                  await api("/inventory", "POST", v);
+                })}
+              >
+                <h2 className="text-xl font-bold">إضافة قطعة غيار</h2>
+                <div className="form-grid">
+                  <Field label="الاسم" name="name" required />
+                  <Field label="SKU" name="sku" required />
+                  <Field label="الفئة" name="category" required />
+                  <Field
+                    label="الكمية"
+                    name="stock_quantity"
+                    type="number"
+                    required
+                  />
+                  <Field
+                    label="حد التنبيه"
+                    name="minimum_warning_limit"
+                    type="number"
+                    required
+                  />
+                  <Field
+                    label="تكلفة الوحدة"
+                    name="unit_cost"
+                    type="number"
+                    required
+                  />
+                </div>
+                <button disabled={busy} className="btn btn-gold">
+                  إضافة
+                </button>
+              </form>
+            )}
+            <div className="glass overflow-x-auto">
+              <table>
+                <thead>
+                  <tr>
+                    {[
+                      "الصنف",
+                      "الفئة",
+                      "الكمية",
+                      "التكلفة",
+                      ...(admin ? ["إدارة"] : []),
+                    ].map((x) => (
+                      <th key={x}>{x}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {parts.map((p) => (
+                    <tr key={p.id}>
+                      <td>
+                        {p.name}
+                        <small className="block font-mono text-slate-400">
+                          {p.sku}
+                        </small>
+                      </td>
+                      <td>{p.category}</td>
+                      <td
+                        className={
+                          p.stock_quantity <= p.minimum_warning_limit
+                            ? "text-amber-300 font-bold"
+                            : ""
+                        }
+                      >
+                        {p.stock_quantity}
+                        {p.stock_quantity <= p.minimum_warning_limit
+                          ? " · منخفض"
+                          : ""}
+                      </td>
+                      <td>{money(p.unit_cost)}</td>
+                      {admin && (
+                        <td>
+                          <form
+                            className="flex gap-2"
+                            onSubmit={form(async (v) => {
+                              await api(`/inventory/${p.id}`, "PUT", {
+                                ...p,
+                                stock_quantity: Number(v.qty),
+                              });
+                            })}
+                          >
+                            <input
+                              aria-label="الكمية"
+                              className="input w-24"
+                              name="qty"
+                              type="number"
+                              min="0"
+                              defaultValue={p.stock_quantity}
+                            />
+                            <button disabled={busy} className="btn btn-muted">
+                              حفظ
+                            </button>
+                            <button
+                              disabled={busy}
+                              type="button"
+                              className="btn btn-danger"
+                              onClick={() =>
+                                void run(async () => {
+                                  await api(`/inventory/${p.id}`, "DELETE");
+                                })
+                              }
+                            >
+                              أرشفة
+                            </button>
+                          </form>
+                        </td>
+                      )}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+        {tab === "settings" && admin && settings && (
+          <form
+            className="glass p-6 space-y-5"
+            onSubmit={form(async (v) => {
+              setSettings(await api("/settings", "PUT", v));
+            })}
+          >
+            <h2 className="text-xl font-bold">بيانات الورشة</h2>
+            <Field
+              label="اسم الورشة"
+              name="name"
+              defaultValue={settings.name}
+              required
+            />
+            <Field
+              label="هاتف الورشة"
+              name="phone"
+              defaultValue={settings.phone || ""}
+            />
+            <Field
+              label="العنوان"
+              name="address"
+              defaultValue={settings.address || ""}
+            />
+            <button disabled={busy} className="btn btn-gold">
+              حفظ الإعدادات
+            </button>
+          </form>
+        )}
+        {tab === "staff" && admin && (
+          <div className="space-y-6">
+            <form
+              className="glass p-6 space-y-4"
+              onSubmit={form(async (v) => {
+                await api("/desks", "POST", v);
+              })}
+            >
+              <h2 className="text-xl font-bold">إضافة طاولة</h2>
+              <Field label="اسم الطاولة" name="name" required />
+              <button disabled={busy} className="btn btn-gold">
+                إضافة
+              </button>
+            </form>
+            <section className="glass p-6 space-y-3">
+              <h2 className="text-xl font-bold">طاولات العمل</h2>
+              {desks.map((d) => (
+                <form
+                  className="flex gap-3 items-center"
+                  key={d.id}
+                  onSubmit={form(async (v) => {
+                    await api(`/desks/${d.id}`, "PUT", {
+                      name: v.name,
+                      active: v.active === "on",
+                    });
+                  })}
+                >
+                  <input
+                    aria-label="اسم الطاولة"
+                    name="name"
+                    className="input flex-1"
+                    defaultValue={d.name}
+                  />
+                  <label className="flex gap-2">
+                    <input
+                      name="active"
+                      type="checkbox"
+                      defaultChecked={d.active}
+                    />
+                    نشطة
+                  </label>
+                  <button disabled={busy} className="btn btn-muted">
+                    حفظ
+                  </button>
+                </form>
+              ))}
+            </section>
+            <form
+              className="glass p-6 space-y-4"
+              onSubmit={form(async (v) => {
+                await api("/users", "POST", {
+                  ...v,
+                  desk_id: v.desk_id ? Number(v.desk_id) : null,
+                });
+              })}
+            >
+              <h2 className="text-xl font-bold">إضافة موظف</h2>
+              <div className="form-grid">
+                <Field label="الاسم" name="name" required />
+                <Field
+                  label="البريد الإلكتروني"
+                  name="email"
+                  type="email"
+                  required
+                />
+                <Field
+                  label="كلمة المرور (12 حرفاً على الأقل)"
+                  name="password"
+                  type="password"
+                  required
+                />
+                <label>
+                  الدور
+                  <select className="input" name="role">
+                    {[
+                      "RECEPTION",
+                      "DIAGNOSIS_DESK",
+                      "TECHNICIAN_DESK",
+                      "ADMIN",
+                    ].map((r) => (
+                      <option key={r}>{r}</option>
+                    ))}
+                  </select>
+                </label>
+                <label>
+                  الطاولة
+                  <select className="input" name="desk_id">
+                    <option value="">بدون طاولة</option>
+                    {desks
+                      .filter((d) => d.active)
+                      .map((d) => (
+                        <option key={d.id} value={d.id}>
+                          {d.name}
+                        </option>
+                      ))}
+                  </select>
+                </label>
+              </div>
+              <button disabled={busy} className="btn btn-gold">
+                إضافة الموظف
+              </button>
+            </form>
+            {[
+              ["الفريق الحالي", staff],
+              ["أرشيف الموظفين", former],
+            ].map(([title, list]) => (
+              <section className="glass p-6" key={String(title)}>
+                <h2 className="text-xl font-bold mb-4">{String(title)}</h2>
+                {(list as User[]).map((s) => (
+                  <div
+                    className="flex justify-between border-t border-slate-700 py-4"
+                    key={s.id}
+                  >
+                    <div>
+                      {s.name}
+                      <p className="font-mono text-sm text-slate-400">
+                        #{s.id} · {s.role} · {s.email}
+                      </p>
+                    </div>
+                    {s.id !== user.id && (
+                      <button
+                        disabled={busy}
+                        className="btn btn-muted"
+                        onClick={() =>
+                          void run(async () => {
+                            await api(`/users/${s.id}`, "PUT", {
+                              active: !s.active,
+                            });
+                          })
+                        }
+                      >
+                        {s.active ? "أرشفة" : "استعادة"}
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </section>
+            ))}
+          </div>
+        )}
+      </main>
+      {selected && (
+        <div className="modal-backdrop">
+          <section className="modal p-6 space-y-5">
+            {error && (
+              <div role="alert" className="error-box">
+                {error}
+              </div>
+            )}
+            <div className="flex justify-between">
+              <h2 className="text-2xl font-bold">
+                {selected.brand} {selected.model}{" "}
+                <span className="text-gold">#{selected.id}</span>
+              </h2>
+              <button
+                aria-label="إغلاق"
+                className="btn btn-muted"
+                onClick={() => setSelected(null)}
+              >
+                ×
+              </button>
+            </div>
+            <span className={`badge status-${selected.status}`}>
+              {labels[selected.status]}
+            </span>
+            <p>
+              {selected.customer_name} ·{" "}
+              <span dir="ltr">{selected.customer_phone}</span>
+            </p>
+            <p>{selected.reported_issue}</p>
+            {selected.device_passcode && (
+              <p>
+                رمز الجهاز: <code>{selected.device_passcode}</code>
+              </p>
+            )}
+            <p>
+              التكلفة:{" "}
+              <b className="text-gold">
+                {money(
+                  Number(selected.estimated_cost) + Number(selected.parts_cost),
+                )}
+              </b>
+            </p>
+            {selected.diagnosis && <p>التشخيص: {selected.diagnosis}</p>}
+            {diagnosis &&
+              ["pending_diagnosis", "awaiting_customer_approval"].includes(
+                selected.status,
+              ) && (
+                <form
+                  className="space-y-4"
+                  onSubmit={form(async (v) =>
+                    update({
+                      ...v,
+                      estimated_cost: Number(v.estimated_cost),
+                      status: "awaiting_customer_approval",
+                    }),
+                  )}
+                >
+                  <label>
+                    نتيجة التشخيص
+                    <textarea
+                      className="input"
+                      name="diagnosis"
+                      defaultValue={selected.diagnosis || ""}
+                      required
+                    />
+                  </label>
+                  <Field
+                    label="تكلفة الخدمة (تضاف تكلفة القطع تلقائياً)"
+                    name="estimated_cost"
+                    type="number"
+                    defaultValue={selected.estimated_cost}
+                    required
+                  />
+                  <button disabled={busy} className="btn btn-gold">
+                    حفظ وإرسال لانتظار الموافقة
+                  </button>
+                </form>
+              )}
+            {reception && selected.status === "awaiting_customer_approval" && (
+              <div className="space-y-4">
+                <button
+                  disabled={busy || !!selected.approved_at}
+                  className="btn btn-gold"
+                  onClick={() =>
+                    void run(async () => update({ approved: true }))
+                  }
+                >
+                  {selected.approved_at
+                    ? "تم تسجيل موافقة العميل"
+                    : "تأكيد موافقة العميل"}
+                </button>
+                {selected.approved_at && (
+                  <form
+                    className="space-y-3"
+                    onSubmit={form(async (v) => {
+                      await api(`/tickets/${selected.id}/route-desk`, "PUT", {
+                        desk_id: Number(v.desk_id),
+                        technician_id: Number(v.technician_id),
+                      });
+                      setSelected(await api<Ticket>(`/tickets/${selected.id}`));
+                    })}
+                  >
+                    <label>
+                      الطاولة
+                      <select className="input" name="desk_id" required>
+                        {desks
+                          .filter((d) => d.active)
+                          .map((d) => (
+                            <option key={d.id} value={d.id}>
+                              {d.name}
+                            </option>
+                          ))}
+                      </select>
+                    </label>
+                    <label>
+                      الفني المسؤول
+                      <select className="input" name="technician_id" required>
+                        {technicians.map((t) => (
+                          <option key={t.id} value={t.id}>
+                            {t.name} ·{" "}
+                            {desks.find((d) => d.id === t.desk_id)?.name}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <button disabled={busy} className="btn btn-gold">
+                      تحويل إلى الطاولة
+                    </button>
+                  </form>
+                )}
+              </div>
+            )}
+            {(tech || admin) && selected.status === "assigned_to_desk" && (
+              <form
+                className="space-y-3"
+                onSubmit={form(async (v) => {
+                  await api(`/tickets/${selected.id}/verify-code`, "POST", v);
+                  setSelected(await api<Ticket>(`/tickets/${selected.id}`));
+                })}
+              >
+                <Field
+                  label="رمز أمان الطاولة من الإيصال B"
+                  name="code"
+                  required
+                />
+                <button disabled={busy} className="btn btn-gold">
+                  تحقق وابدأ الإصلاح
+                </button>
+              </form>
+            )}
+            {(tech || admin) &&
+              selected.status === "in_repair" &&
+              selected.unlocked_at && (
+                <form
+                  className="space-y-3"
+                  onSubmit={form(async (v) =>
+                    update({
+                      notes: v.notes,
+                      ...(v.delivery_minutes
+                        ? { delivery_minutes: Number(v.delivery_minutes) }
+                        : {}),
+                    }),
+                  )}
+                >
+                  <Field
+                    label="المدة المتبقية بالدقائق"
+                    name="delivery_minutes"
+                    type="number"
+                  />
+                  <label>
+                    ملاحظات الإصلاح
+                    <textarea
+                      className="input"
+                      name="notes"
+                      defaultValue={selected.notes || ""}
+                    />
+                  </label>
+                  <div className="flex gap-3">
+                    <button disabled={busy} className="btn btn-muted">
+                      حفظ الملاحظات والموعد
+                    </button>
+                    <button
+                      type="button"
+                      disabled={busy}
+                      className="btn btn-gold"
+                      onClick={() =>
+                        void run(async () =>
+                          update({ status: "ready_for_delivery" }),
+                        )
+                      }
+                    >
+                      جاهز للتسليم
+                    </button>
+                  </div>
+                </form>
+              )}
+            {((diagnosis &&
+              ["pending_diagnosis", "awaiting_customer_approval"].includes(
+                selected.status,
+              )) ||
+              ((tech || admin) &&
+                selected.status === "in_repair" &&
+                selected.unlocked_at)) && (
+              <form
+                className="space-y-3 border-t border-slate-700 pt-4"
+                onSubmit={form(async (v) => {
+                  await api(`/tickets/${selected.id}/consume-parts`, "POST", {
+                    parts: [
+                      {
+                        inventory_item_id: Number(v.part),
+                        quantity: Number(v.quantity),
+                      },
+                    ],
+                  });
+                  setSelected(await api<Ticket>(`/tickets/${selected.id}`));
+                })}
+              >
+                <label>
+                  صرف قطعة غيار
+                  <select className="input" name="part" required>
+                    {parts
+                      .filter((p) => p.stock_quantity > 0)
+                      .map((p) => (
+                        <option key={p.id} value={p.id}>
+                          {p.name} · {p.stock_quantity} متوفر
+                        </option>
+                      ))}
+                  </select>
+                </label>
+                <Field
+                  label="الكمية"
+                  name="quantity"
+                  type="number"
+                  defaultValue="1"
+                  required
+                />
+                <button disabled={busy} className="btn btn-muted">
+                  صرف من المخزون
+                </button>
+              </form>
+            )}
+            {selected.status === "ready_for_delivery" && (
+              <div className="flex flex-wrap gap-3">
+                <a
+                  className="btn btn-muted"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  href={`https://wa.me/${selected.customer_phone.replace(/\D/g, "")}?text=${encodeURIComponent(`مرحباً ${selected.customer_name}، جهازك ${selected.brand} ${selected.model} جاهز للاستلام. رقم الطلب ${selected.reference}`)}`}
+                >
+                  إشعار واتساب
+                </a>
+                {reception && (
+                  <button
+                    disabled={busy}
+                    className="btn btn-gold"
+                    onClick={() =>
+                      void run(async () => {
+                        await api(`/tickets/${selected.id}/checkout`, "PUT");
+                        setSelected(null);
+                      })
+                    }
+                  >
+                    تأكيد التسليم
+                  </button>
+                )}
+              </div>
+            )}
+            {admin && !["delivered", "cancelled"].includes(selected.status) && (
+              <button
+                disabled={busy}
+                className="btn btn-danger"
+                onClick={() =>
+                  void run(async () => update({ status: "cancelled" }))
+                }
+              >
+                إلغاء الطلب
+              </button>
+            )}
+          </section>
+        </div>
+      )}
+      {receipt && (
+        <div className="modal-backdrop">
+          <section className="modal p-6">
+            <div className="receipt-grid print-receipt">
+              {["A", "B"].map((part) => (
+                <article key={part} className="receipt-paper">
+                  <h2 className="text-2xl font-black">نواة للصيانة</h2>
+                  <p className="my-3">
+                    {part === "A" ? "نسخة العميل · A" : "نسخة طاولة العمل · B"}
+                  </p>
+                  <p className="font-mono text-sm break-all">
+                    {receipt.ticket.reference}
+                  </p>
+                  <h3 className="font-bold my-4">
+                    {receipt.ticket.brand} {receipt.ticket.model}
+                  </h3>
+                  <p>{receipt.ticket.customer_name}</p>
+                  <p className="my-3">{receipt.ticket.reported_issue}</p>
+                  {part === "A" ? (
+                    <>
+                      <QRCodeSVG
+                        value={receipt.part_a.tracking_url}
+                        size={130}
+                      />
+                      <p className="text-sm mt-3">امسح لمتابعة حالة الإصلاح</p>
+                    </>
+                  ) : (
+                    <>
+                      <p>رمز أمان الطاولة</p>
+                      <strong className="text-4xl font-mono tracking-widest block mt-4">
+                        {receipt.part_b.security_code}
+                      </strong>
+                      <p className="text-sm mt-3">
+                        احتفظ بهذه النسخة؛ لا يمكن استرجاع الرمز.
+                      </p>
+                    </>
+                  )}
+                </article>
+              ))}
+            </div>
+            <div className="flex gap-3 mt-5">
+              <button className="btn btn-gold" onClick={() => window.print()}>
+                <Printer size={17} />
+                طباعة النسختين
+              </button>
+              <button
+                className="btn btn-muted"
+                onClick={() => setReceipt(null)}
+              >
+                إغلاق
+              </button>
+            </div>
+          </section>
+        </div>
+      )}
+    </div>
+  );
 }
-
-function SectionTitle({title,sub,action}:{title:string;sub:string;action?:React.ReactNode}){return <div className="mb-4 flex items-end justify-between"><div><h2 className="text-lg font-extrabold">{title}</h2><p className="mt-1 text-xs text-slate-500">{sub}</p></div>{action}</div>}
-function Overview({devices,parts,desks,setTab,openIntake,now}:{devices:Device[];parts:Part[];desks:Desk[];setTab:(t:Tab)=>void;openIntake:()=>void;now:number}){
- const diagnosis=devices.filter(d=>d.status==='diagnosis').length,repair=devices.filter(d=>d.status==='repair').length,ready=devices.filter(d=>d.status==='ready').length,approval=devices.filter(d=>d.status==='approval').length
- const stats=[{label:'إجمالي الأجهزة النشطة',value:devices.length,delta:'كل الطلبات المفتوحة',icon:Smartphone,color:'text-cyan-300',bg:'bg-cyan-400/10'},{label:'قيد الإصلاح',value:repair,delta:'على طاولات الفنيين',icon:Wrench,color:'text-blue-300',bg:'bg-blue-400/10'},{label:'بانتظار الموافقة',value:approval,delta:'تحتاج متابعة العميل',icon:Clock3,color:'text-amber-300',bg:'bg-amber-400/10'},{label:'جاهز للتسليم',value:ready,delta:'بانتظار الاستلام',icon:CheckCircle2,color:'text-emerald-300',bg:'bg-emerald-400/10'}]
- return <div className="space-y-6"><div className="flex items-center justify-between rounded-2xl border border-gold/20 bg-gradient-to-l from-[#342b17] via-[#24252a] to-[#1d2632] p-5 max-md:flex-col max-md:items-start max-md:gap-4"><div className="flex items-center gap-4"><div className="grid h-12 w-12 place-items-center rounded-xl bg-gold/15 text-gold"><Zap size={24}/></div><div><div className="font-bold">أهلاً بك في نواة للصيانة</div><p className="mt-1 text-xs text-slate-400">إدارة يومك في الورشة تبدأ من هنا. لديك <b className="text-gold">{devices.length}</b> طلب نشط.</p></div></div><button onClick={openIntake} className="btn btn-gold"><Plus size={17}/>استلام جهاز جديد</button></div>
-  <div className="grid grid-cols-4 gap-4 max-lg:grid-cols-2">{stats.map(({label,value,delta,icon:Icon,color,bg})=><div key={label} className="glass rounded-2xl p-4"><div className="flex items-center justify-between"><span className="text-xs text-slate-400">{label}</span><span className={`grid h-9 w-9 place-items-center rounded-xl ${bg} ${color}`}><Icon size={18}/></span></div><div className="mt-3 text-3xl font-black">{value}</div><div className="mt-1 text-[11px] text-slate-500">{delta}</div></div>)}</div>
-  <div className="grid grid-cols-3 gap-5 max-xl:grid-cols-1"><div className="glass col-span-2 rounded-2xl p-5 max-xl:col-span-1"><SectionTitle title="حركة الصيانة" sub="توزيع الأجهزة الحالية حسب حالة الطلب"/><div className="mb-5 flex h-3 overflow-hidden rounded-full bg-slate-800">{[diagnosis,approval,repair,ready].map((v,i)=><div key={i} style={{width:`${devices.length?v/devices.length*100:0}%`}} className={['bg-cyan-400','bg-gold','bg-blue-400','bg-emerald-400'][i]}/>)}</div><div className="grid grid-cols-4 gap-2 max-sm:grid-cols-2">{[['التشخيص',diagnosis,'bg-cyan-400'],['موافقة العميل',approval,'bg-gold'],['قيد الإصلاح',repair,'bg-blue-400'],['جاهز للتسليم',ready,'bg-emerald-400']].map(([t,v,c])=><div key={String(t)} className="flex items-center gap-2 text-xs"><span className={`h-2 w-2 rounded-full ${c}`}/><span className="text-slate-400">{t}</span><b className="mr-auto">{v}</b></div>)}</div><div className="mt-6 border-t border-slate-700/70 pt-4"><SectionTitle title="أحدث الأجهزة" sub="آخر الأجهزة المسجلة في الاستقبال" action={<button onClick={()=>setTab('intake')} className="text-xs font-bold text-gold">عرض الكل ←</button>}/>{devices.slice(0,4).length?devices.slice(0,4).map(d=><DeviceRow key={d.id} d={d} onClick={()=>setTab('workbench')}/>):<Empty icon={Smartphone} title="لا توجد أجهزة بعد" text="ابدأ بتسجيل أول جهاز في الورشة"/>}</div></div>
-   <div className="space-y-5"><div className="glass rounded-2xl p-5"><SectionTitle title="الطاولات الفنية" sub="الإشغال المباشر" action={<button onClick={()=>setTab('team')} className="text-xs text-gold">إدارة</button>}/><div className="space-y-3">{desks.map(d=>{const busy=devices.some(x=>x.desk===d.name&&!x.closed);return <div key={d.id} className="flex items-center gap-3 rounded-xl bg-[#131b25] p-3"><div className={`grid h-9 w-9 place-items-center rounded-lg ${busy?'bg-amber-400/10 text-amber-300':'bg-emerald-400/10 text-emerald-300'}`}><Wrench size={16}/></div><div className="min-w-0 flex-1"><div className="text-xs font-bold">{d.name}</div><div className="mt-1 truncate text-[10px] text-slate-500">{d.tech}</div></div><span className={`h-2 w-2 rounded-full ${busy?'bg-amber-400':'bg-emerald-400'}`}/></div>})}</div></div><div className="glass rounded-2xl p-5"><SectionTitle title="تنبيهات المخزون" sub="قطع وصلت للحد الأدنى"/><div className="space-y-3">{parts.filter(p=>p.qty<=p.min).length?parts.filter(p=>p.qty<=p.min).slice(0,3).map(p=><div key={p.id} className="flex items-center gap-3"><span className="grid h-8 w-8 place-items-center rounded-lg bg-crimson/10 text-crimson"><AlertTriangle size={15}/></span><div className="min-w-0 flex-1"><div className="truncate text-xs font-bold">{p.name}</div><div className="text-[10px] text-slate-500">متبقي {p.qty} قطع</div></div><span className="text-[10px] text-crimson">منخفض</span></div>):<div className="flex items-center gap-2 text-xs text-emerald-300"><CheckCircle2 size={16}/>جميع مستويات المخزون جيدة</div>}</div></div></div></div>
- </div>
+function Field({
+  label,
+  ...props
+}: {
+  label: string;
+  name: string;
+  type?: string;
+  required?: boolean;
+  defaultValue?: string;
+}) {
+  return (
+    <label>
+      {label}
+      <input
+        className="input"
+        min={props.type === "number" ? 0 : undefined}
+        step={props.type === "number" ? "any" : undefined}
+        {...props}
+      />
+    </label>
+  );
 }
-function Empty({icon:Icon,title,text}:{icon:any;title:string;text:string}){return <div className="grid place-items-center py-8 text-center"><span className="mb-3 grid h-12 w-12 place-items-center rounded-2xl bg-slate-800 text-slate-500"><Icon size={21}/></span><div className="text-sm font-bold text-slate-300">{title}</div><div className="mt-1 text-xs text-slate-500">{text}</div></div>}
-function DeviceRow({d,onClick}:{d:Device;onClick:()=>void}){return <button onClick={onClick} className="table-row flex w-full items-center gap-3 py-3 text-right hover:bg-white/[.02]"><div className="grid h-10 w-10 place-items-center rounded-xl bg-slate-800 text-cyan-300"><Smartphone size={18}/></div><div className="min-w-0 flex-1"><div className="text-xs font-bold">{d.brand} {d.model}</div><div className="mt-1 text-[10px] text-slate-500">{d.customer} · {d.id}</div></div><span className={`badge ${statusStyle[d.status]}`}>{statusLabel[d.status]}</span></button>}
-function SearchBar({value,setValue,placeholder='ابحث عن جهاز...'}:{value:string;setValue:(x:string)=>void;placeholder?:string}){return <div className="relative w-full max-w-xs"><Search size={16} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500"/><input className="input pr-9 text-xs" placeholder={placeholder} value={value} onChange={e=>setValue(e.target.value)}/></div>}
-function Intake({devices,search,setSearch,open,select}:{devices:Device[];search:string;setSearch:(x:string)=>void;open:()=>void;select:(d:Device)=>void}){const columns:[Status,string,string][]=[['diagnosis','تشخيص','bg-cyan-400'],['approval','بانتظار العميل','bg-amber-400'],['repair','قيد الإصلاح','bg-blue-400'],['ready','تم الإصلاح','bg-emerald-400']];return <div className="space-y-5"><div className="glass flex items-center justify-between rounded-2xl p-5 max-sm:flex-col max-sm:items-stretch max-sm:gap-3"><div><div className="font-bold">استقبال وتشخيص الأجهزة</div><div className="mt-1 text-xs text-slate-500">سجّل الجهاز وتابع انتقاله بين مراحل الورشة.</div></div><button onClick={open} className="btn btn-gold"><Plus size={16}/>استلام جهاز</button></div><SearchBar value={search} setValue={setSearch}/><div className="grid grid-cols-4 gap-4 max-xl:grid-cols-2 max-sm:grid-cols-1">{columns.map(([status,title,color])=><section key={status} className="glass min-h-64 rounded-2xl p-3"><div className="mb-3 flex items-center gap-2 border-b border-slate-700 pb-3"><span className={`h-2 w-2 rounded-full ${color}`}/><h2 className="text-sm font-bold">{title}</h2><span className="mr-auto rounded-full bg-slate-800 px-2 py-0.5 text-xs">{devices.filter(d=>d.status===status).length}</span></div><div className="space-y-3">{devices.filter(d=>d.status===status).map(d=><button key={d.id} onClick={()=>select(d)} className={`glass w-full rounded-xl p-3 text-right ${d.repairType==='fast'?'fast-repair':''}`}><div className="flex items-start justify-between gap-2"><span className="text-xs font-bold">{d.brand} {d.model}</span><span className={`badge ${statusStyle[d.status]}`}>{d.approved&&d.status==='approval'?'وافق · ينتظر الفني':statusLabel[d.status]}</span></div><div className="mt-2 text-[11px] text-slate-400">{d.customer} · {d.phone}</div><div className="mt-2 flex items-center justify-between text-[10px] text-slate-500"><span>{d.desk||'غير مسند'}</span><b className="text-gold">{money(d.cost)}</b></div>{d.repairType==='fast'&&<span className="mt-2 inline-flex items-center gap-1 text-[10px] text-amber-300"><Zap size={12}/>إصلاح سريع</span>}</button>)}</div></section>)}</div></div>}
-function Workbench({devices,search,setSearch,now,update,consume,parts,setTicket}:{devices:Device[];search:string;setSearch:(x:string)=>void;now:number;update:(id:string,p:Partial<Device>)=>void;consume:(id:string,p:string)=>void;parts:Part[];setTicket:(d:Device)=>void}){
- const work=devices.filter(d=>d.desk||d.status==='diagnosis');return <div className="space-y-5"><div className="glass rounded-2xl p-5"><SectionTitle title="لوحة الفنيين" sub="كل جهاز محمي برمز أمان مطبوع على نسخة طاولة العمل"/><div className="flex gap-3 max-sm:flex-col"><SearchBar value={search} setValue={setSearch}/><div className="flex items-center gap-2 rounded-xl bg-cyan-950/50 px-3 py-2 text-xs text-cyan-200"><ShieldCheck size={16}/>رمز تحقق من ٤ خانات مطلوب</div></div></div><div className="grid grid-cols-2 gap-4 max-xl:grid-cols-1">{work.length?work.map(d=><TechCard key={d.id} d={d} now={now} update={update} consume={consume} parts={parts} setTicket={setTicket}/>):<div className="glass col-span-2 rounded-2xl"><Empty icon={Wrench} title="لا توجد أجهزة على طاولات العمل" text="ابدأ من الاستقبال بتوجيه جهاز بعد التشخيص"/></div>}</div></div>
+function Countdown({ due }: { due: string | null }) {
+  const [now, setNow] = useState(Date.now());
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, []);
+  if (!due)
+    return <span className="text-sm text-slate-400">لم يحدد الموعد</span>;
+  const s = Math.max(0, Math.floor((Date.parse(due) - now) / 1000));
+  return (
+    <span className="font-mono" dir="ltr">
+      {Math.floor(s / 3600)}:
+      {String(Math.floor((s % 3600) / 60)).padStart(2, "0")}:
+      {String(s % 60).padStart(2, "0")}
+    </span>
+  );
 }
-function TechCard({d,now,update,consume,parts,setTicket}:{d:Device;now:number;update:(id:string,p:Partial<Device>)=>void;consume:(id:string,p:string)=>void;parts:Part[];setTicket:(d:Device)=>void}){const [code,setCode]=useState(''),[err,setErr]=useState(false);const unlock=()=>{if(!d.approved){setErr(true);return}if(code.toUpperCase()===d.code){update(d.id,{unlocked:true,status:'repair'});setErr(false)}else setErr(true)};const mins=Math.max(0,Math.ceil(((d.status==='diagnosis'?d.created+3600000:d.expected)-now)/60000));return <div className="glass rounded-2xl p-5"><div className="mb-4 flex items-start justify-between"><div className="flex items-center gap-3"><span className="grid h-11 w-11 place-items-center rounded-xl bg-panel text-gold"><Smartphone size={20}/></span><div><div className="font-bold">{d.brand} {d.model}</div><div className="mt-1 text-[10px] text-slate-500">{d.id} · {d.desk||'بانتظار التوجيه'}</div></div></div><span className={`badge ${statusStyle[d.status]}`}>{statusLabel[d.status]}</span></div>{!d.unlocked?<div className="rounded-xl border border-gold/20 bg-gold/5 p-4"><div className="flex items-center gap-2 text-xs font-bold text-gold"><ShieldCheck size={16}/>بوابة التحقق الأمني</div><p className="mt-2 text-[11px] text-slate-400">أدخل رمز الأمان المطبوع على نسخة طاولة العمل.</p><div className="mt-3 flex gap-2"><input className="input text-center font-mono tracking-[.3em]" maxLength={4} placeholder="••••" value={code} onChange={e=>setCode(e.target.value.toUpperCase())}/><button onClick={unlock} className="btn btn-gold">تحقق</button></div>{err&&<div className="mt-2 text-xs text-crimson">{!d.approved?'يلزم تسجيل موافقة العميل أولاً.':'الرمز غير صحيح، تحقق من النسخة المطبوعة.'}</div>}</div>:<><div className="mb-4 grid grid-cols-2 gap-3"><div className="rounded-xl bg-[#121a24] p-3"><div className="text-[10px] text-slate-500">العميل</div><div className="mt-1 text-xs font-bold">{d.customer}</div></div><div className="rounded-xl bg-[#121a24] p-3"><div className="text-[10px] text-slate-500">{d.status==='diagnosis'?'وقت التشخيص المتبقي':'الوقت المتبقي'}</div><div className={`mt-1 text-xs font-bold ${mins<60?'text-crimson':'text-emerald-300'}`}>{mins>60?`${Math.floor(mins/60)} س ${mins%60} د`:`${mins} دقيقة`}</div></div></div><div className="mb-4"><label className="mb-1.5 block text-[10px] text-slate-500">حالة العمل</label><select className="input text-xs" value={d.status} onChange={e=>update(d.id,{status:e.target.value as Status})}><option value="diagnosis">قيد التشخيص</option><option value="approval">بانتظار موافقة العميل</option><option value="repair">قيد الإصلاح</option><option value="ready">جاهز للتسليم</option></select></div>{d.status==='diagnosis'&&<div className="mb-4"><label className="mb-1.5 block text-[10px] text-slate-500">استهلاك قطعة خلال التشخيص</label><select className="input text-xs" defaultValue="" onChange={e=>{if(e.target.value)consume(d.id,e.target.value)}}><option value="">اختر قطعة من المخزون...</option>{parts.filter(p=>p.qty>0).map(p=><option key={p.id} value={p.id}>{p.name} · المتوفر {p.qty} · {money(p.price)}</option>)}</select></div>}<div className="mb-4 flex items-center justify-between rounded-xl bg-[#121a24] px-3 py-2.5 text-xs"><span className="text-slate-400">التكلفة التقديرية</span><b className="text-gold">{money(d.cost)}</b></div>{d.status==='ready'&&<button onClick={()=>window.open(`https://wa.me/${d.phone.replace(/\D/g,'')}?text=${encodeURIComponent(`مرحباً ${d.customer}، جهازك ${d.brand} ${d.model} أصبح جاهزاً للاستلام من نواة للصيانة. رقم الطلب: ${d.id}.`)}`,'_blank','noopener,noreferrer')} className="btn mb-2 w-full border border-emerald-800 bg-emerald-950/70 text-emerald-300"><MessageCircle size={16}/>إرسال رسالة واتساب للعميل</button>}<button onClick={()=>setTicket(d)} className="btn btn-muted w-full text-xs">تفاصيل الطلب والإجراءات</button></>}</div>}
-function Inventory({parts,setParts,open,notify}:{parts:Part[];setParts:React.Dispatch<React.SetStateAction<Part[]>>;open:()=>void;notify:(x:string)=>void}){const [search,setSearch]=useState('');const [editing,setEditing]=useState<string|null>(null);return <div className="space-y-5"><div className="glass flex items-center justify-between rounded-2xl p-5"><div><div className="font-bold">إدارة قطع الغيار</div><div className="mt-1 text-xs text-slate-500">تحكم بمستويات المخزون وتكلفة القطع المستخدمة.</div></div><button onClick={open} className="btn btn-gold"><Plus size={16}/>إضافة قطعة</button></div><div className="glass rounded-2xl p-5"><div className="mb-4 flex items-center justify-between"><SectionTitle title="قائمة المخزون" sub={`${parts.length} صنف مسجل`}/><SearchBar value={search} setValue={setSearch} placeholder="ابحث بالاسم أو الرمز..."/></div><div className="overflow-x-auto"><table className="w-full min-w-[650px] text-right text-xs"><thead><tr className="text-[10px] text-slate-500"><th className="pb-3 font-medium">القطعة</th><th className="pb-3 font-medium">رمز الصنف</th><th className="pb-3 font-medium">الكمية</th><th className="pb-3 font-medium">حد التنبيه</th><th className="pb-3 font-medium">سعر الوحدة</th><th className="pb-3 font-medium">إجراءات</th></tr></thead><tbody>{parts.filter(p=>`${p.name} ${p.sku}`.toLowerCase().includes(search.toLowerCase())).map(p=><tr key={p.id} className="table-row"><td className="py-4 font-bold">{p.name}</td><td className="py-4 font-mono text-slate-400">{p.sku}</td><td className="py-4">{editing===p.id?<input className="input w-20 !p-2" type="number" value={p.qty} onChange={e=>setParts(ps=>ps.map(x=>x.id===p.id?{...x,qty:+e.target.value}:x))}/>:<span className={`badge ${p.qty<=p.min?'bg-crimson/10 text-crimson':'bg-emerald-950 text-emerald-300'}`}>{p.qty} قطعة</span>}</td><td className="py-4 text-slate-400">{p.min}</td><td className="py-4 font-bold text-gold">{money(p.price)}</td><td className="py-4"><div className="flex gap-2"><button onClick={()=>setEditing(editing===p.id?null:p.id)} className="btn btn-muted !px-2 !py-1.5 text-[10px]">{editing===p.id?'حفظ':'تعديل'}</button><button onClick={()=>{setParts(ps=>ps.filter(x=>x.id!==p.id));notify('تم حذف القطعة')}} className="btn btn-danger !px-2 !py-1.5"><Trash2 size={13}/></button></div></td></tr>)}</tbody></table></div></div></div>}
-function Delivery({pending,delivered,select,close}:{pending:Device[];delivered:Device[];select:(d:Device)=>void;close:(d:Device)=>void}){const section=(title:string,items:Device[],done:boolean)=><section className="glass rounded-2xl p-5"><div className="mb-4 flex items-center justify-between"><div><h2 className="font-bold">{title}</h2><p className="mt-1 text-xs text-slate-500">{done?'طلبات تم تسليمها وإغلاقها':'أجهزة جاهزة تنتظر استلام العميل'}</p></div><span className={`rounded-full px-3 py-1 text-sm font-bold ${done?'bg-slate-700 text-slate-300':'bg-emerald-400/10 text-emerald-300'}`}>{items.length}</span></div>{items.length?<div className="grid grid-cols-2 gap-4 max-xl:grid-cols-1">{items.map(d=><div key={d.id} className="rounded-2xl border border-slate-700 bg-[#131b25] p-4"><div className="mb-3 flex items-center justify-between"><div><div className="font-bold">{d.brand} {d.model}</div><div className="mt-1 text-xs text-slate-500">{d.customer} · {d.id}</div></div><span className={`badge ${done?'bg-slate-800 text-slate-300':statusStyle.ready}`}>{done?'تم التسليم':'بانتظار الاستلام'}</span></div><div className="mb-3 grid grid-cols-2 gap-3 text-xs"><div className="rounded-lg bg-[#1b2330] p-3">الهاتف: {d.phone}</div><div className="rounded-lg bg-[#1b2330] p-3">الإجمالي: {money(d.cost)}</div></div><div className="flex gap-2"><button onClick={()=>select(d)} className="btn btn-muted flex-1 text-xs">تفاصيل الفاتورة</button>{!done&&<button onClick={()=>close(d)} className="btn flex-1 bg-emerald-500 text-[#07130d] text-xs"><Check size={15}/>تأكيد التسليم</button>}</div></div>)}</div>:<Empty icon={done?CheckCircle2:Archive} title={done?'لا توجد أجهزة تم تسليمها':'لا توجد أجهزة بانتظار الاستلام'} text={done?'تظهر هنا الأجهزة بعد تأكيد استلامها':'تظهر الأجهزة هنا بعد اكتمال الإصلاح'}/>}</section>;return <div className="space-y-5"><div className="glass rounded-2xl border-emerald-900/50 bg-gradient-to-l from-emerald-950/40 to-[#1b2330] p-5"><div className="flex items-center gap-3"><span className="grid h-11 w-11 place-items-center rounded-xl bg-emerald-400/10 text-emerald-300"><Archive size={21}/></span><div><div className="font-bold">إدارة التسليم</div><div className="mt-1 text-xs text-slate-400">تابع الأجهزة الجاهزة والأجهزة التي تم تسليمها.</div></div></div></div>{section('أجهزة غير مسلّمة',pending,false)}{section('أجهزة تم تسليمها',delivered,true)}</div>}
-function LegacyTeam({desks,setDesks,staff,setStaff,tab,setTab,openDesk,notify}:{desks:Desk[];setDesks:React.Dispatch<React.SetStateAction<Desk[]>>;staff:Staff[];setStaff:React.Dispatch<React.SetStateAction<Staff[]>>;tab:boolean;setTab:(x:boolean)=>void;openDesk:()=>void;notify:(x:string)=>void}){return null}
-function Tracking({devices,search,setSearch,select}:{devices:Device[];search:string;setSearch:(x:string)=>void;select:(d:Device)=>void}){return <div className="space-y-5"><div className="glass rounded-2xl p-5"><SectionTitle title="بوابة تتبع العملاء" sub="ابحث عن رقم الطلب لعرض رابط التتبع والحالة المباشرة للعميل"/><SearchBar value={search} setValue={setSearch} placeholder="رقم الطلب أو اسم العميل أو الهاتف"/></div><div className="grid grid-cols-2 gap-4 max-xl:grid-cols-1">{devices.filter(d=>!search||`${d.id} ${d.customer} ${d.phone}`.toLowerCase().includes(search.toLowerCase())).map(d=><div key={d.id} className="glass flex items-center gap-4 rounded-2xl p-4"><div className="rounded-xl bg-white p-2"><QRCodeSVG value={`${typeof window!=='undefined'?window.location.origin:''}/?track=${d.id}`} size={66}/></div><div className="min-w-0 flex-1"><div className="font-bold">{d.brand} {d.model}</div><div className="mt-1 text-xs text-slate-500">{d.customer} · {d.id}</div><span className={`badge mt-2 ${statusStyle[d.status]}`}>{statusLabel[d.status]}</span></div><button onClick={()=>select(d)} className="btn btn-muted !px-3 text-xs">عرض</button></div>)}</div>{devices.length===0&&<div className="glass rounded-2xl"><Empty icon={QrCode} title="لا توجد طلبات نشطة" text="تظهر روابط التتبع هنا بعد استقبال الأجهزة"/></div>}</div>}
-
-function Modal({title,close,children}:{title:string;close:()=>void;children:React.ReactNode}){return <div className="modal-backdrop" onMouseDown={e=>{if(e.target===e.currentTarget)close()}}><div className="modal"><div className="sticky top-0 z-10 flex items-center justify-between border-b border-slate-700 bg-[#171f2b]/95 px-5 py-4 backdrop-blur"><h2 className="font-bold">{title}</h2><button onClick={close} className="rounded-lg p-2 text-slate-400 hover:bg-slate-700"><X size={18}/></button></div><div className="p-5">{children}</div></div></div>}
-function IntakeForm({form,setForm,submit}:{form:any;setForm:React.Dispatch<React.SetStateAction<any>>;submit:()=>void}){const field=(key:string,val:string)=>setForm((f:any)=>({...f,[key]:val}));return <div className="space-y-4"><div className="rounded-xl border border-cyan-900/60 bg-cyan-950/30 p-3 text-xs text-cyan-200">يبدأ كل طلب بمرحلة تشخيص مدتها ساعة واحدة. بعد معرفة التكلفة، تُرسل موافقة العميل قبل توجيه الجهاز للفني.</div><div className="grid grid-cols-2 gap-3 max-sm:grid-cols-1"><label className="text-xs text-slate-400">اسم العميل *<input className="input mt-2" placeholder="مثال: محمد أحمد" value={form.customer} onChange={e=>field('customer',e.target.value)}/></label><label className="text-xs text-slate-400">رقم الهاتف *<input className="input mt-2" placeholder="+963 9XX XXX XXX" dir="ltr" value={form.phone} onChange={e=>field('phone',e.target.value)}/></label><label className="text-xs text-slate-400">رمز/نمط قفل الهاتف *<input className="input mt-2" value={form.passcode} onChange={e=>field('passcode',e.target.value)} placeholder="رمز المرور أو النمط"/></label><label className="text-xs text-slate-400">الشركة المصنعة<select className="input mt-2" value={form.brand} onChange={e=>field('brand',e.target.value)}>{['Apple','Samsung','Xiaomi','Huawei','Oppo','Honor','أخرى'].map(x=><option key={x}>{x}</option>)}</select></label><label className="text-xs text-slate-400">طراز الجهاز *<input className="input mt-2" placeholder="مثال: iPhone 13 Pro" value={form.model} onChange={e=>field('model',e.target.value)}/></label><label className="col-span-2 text-xs text-slate-400 max-sm:col-span-1">IMEI / الرقم التسلسلي<input className="input mt-2" dir="ltr" placeholder="اختياري" value={form.imei} onChange={e=>field('imei',e.target.value)}/></label><label className="col-span-2 text-xs text-slate-400 max-sm:col-span-1">العطل المبلغ عنه *<textarea className="input mt-2 min-h-20 resize-y" placeholder="صف المشكلة كما ذكرها العميل..." value={form.issue} onChange={e=>field('issue',e.target.value)}/></label></div><div><div className="mb-2 text-xs text-slate-400">نوع التشخيص</div><div className="grid grid-cols-2 gap-3"><button onClick={()=>field('kind','instant')} className={`rounded-xl border p-3 text-right ${form.kind==='instant'?'border-gold bg-gold/10':'border-slate-700 bg-[#121923]'}`}><div className="flex items-center gap-2 text-xs font-bold"><Zap size={15} className="text-gold"/>تشخيص فوري</div><div className="mt-1 text-[10px] text-slate-500">تسليم متوقع خلال ٤ ساعات</div></button><button onClick={()=>field('kind','standard')} className={`rounded-xl border p-3 text-right ${form.kind==='standard'?'border-cyan-400 bg-cyan-400/10':'border-slate-700 bg-[#121923]'}`}><div className="flex items-center gap-2 text-xs font-bold"><Clock3 size={15} className="text-cyan-300"/>تشخيص عادي</div><div className="mt-1 text-[10px] text-slate-500">تسليم متوقع خلال ٢٤ ساعة</div></button></div></div><button onClick={submit} className="btn btn-gold w-full"><Plus size={16}/>تسجيل الجهاز وإنشاء النسختين</button></div>}
-function Receipt({device,close,tracking}:{device:Device;close:()=>void;tracking:()=>void}){const url=typeof window!=='undefined'?`${window.location.origin}/?track=${device.id}`:device.id;return <div className="modal-backdrop"><div className="modal"><div className="flex items-center justify-between border-b border-slate-700 px-5 py-4"><div><h2 className="font-bold">تم استلام الجهاز</h2><div className="mt-1 text-xs text-slate-500">رقم الطلب {device.id} · اطبع النسختين للعميل والفني</div></div><button onClick={close} className="rounded-lg p-2 text-slate-400"><X size={18}/></button></div><div className="grid grid-cols-2 gap-4 p-5 max-sm:grid-cols-1"><div className="rounded-2xl border border-cyan-800/70 bg-[#111a25] p-4"><div className="mb-3 flex items-center justify-between"><span className="text-xs font-black text-cyan-300">نسخة العميل · A</span><span className="badge bg-cyan-950 text-cyan-300">إيصال</span></div><div className="border-b border-dashed border-slate-700 pb-3 text-center"><div className="text-lg font-black">نواة للصيانة</div><div className="text-[10px] text-slate-500">إيصال استلام جهاز</div></div><div className="space-y-2 py-3 text-xs"><ReceiptRow label="رقم الطلب" value={device.id}/><ReceiptRow label="العميل" value={device.customer}/><ReceiptRow label="الجهاز" value={`${device.brand} ${device.model}`}/><ReceiptRow label="العطل" value={device.issue}/><ReceiptRow label="نوع الخدمة" value={device.kind==='instant'?'تصليح فوري':'تصليح عادي'}/><ReceiptRow label="التكلفة الحالية" value={money(device.cost)}/></div><div className="flex items-center justify-between border-t border-slate-700 pt-3"><QRCodeSVG value={url} size={76} bgColor="#ffffff"/><div className="text-left text-[10px] text-slate-500">امسح لمتابعة<br/>حالة الإصلاح<br/><button onClick={tracking} className="mt-2 text-cyan-300">فتح التتبع</button></div></div></div><div className="rounded-2xl border border-gold/40 bg-[#1b1c20] p-4"><div className="mb-3 flex items-center justify-between"><span className="text-xs font-black text-gold">نسخة طاولة العمل · B</span><span className="badge bg-amber-950 text-gold">للفني</span></div><div className="border-b border-dashed border-slate-700 pb-3 text-center"><div className="text-lg font-black">نواة للصيانة</div><div className="text-[10px] text-slate-500">نسخة داخلية · يحفظها الفني</div></div><div className="space-y-2 py-3 text-xs"><ReceiptRow label="رقم الطلب" value={device.id}/><ReceiptRow label="العميل" value={device.customer}/><ReceiptRow label="الجهاز" value={`${device.brand} ${device.model}`}/><ReceiptRow label="العطل الأولي" value={device.issue}/></div><div className="rounded-xl border border-gold/25 bg-gold/5 py-4 text-center"><div className="text-[10px] text-slate-400">رمز الأمان لطاولة العمل</div><div className="mt-2 font-mono text-3xl font-black tracking-[.3em] text-gold">{device.code}</div><div className="mt-2 text-[9px] text-slate-500">لا يبدأ العمل إلا بعد موافقة العميل وإدخال الرمز</div></div></div></div><div className="flex justify-end gap-2 px-5 pb-5"><button onClick={()=>window.print()} className="btn btn-muted"><Printer size={15}/>طباعة النسختين</button><button onClick={close} className="btn btn-gold">تم</button></div></div></div>}
-function ReceiptRow({label,value}:{label:string;value:string}){return <div className="flex items-start justify-between gap-2"><span className="shrink-0 text-slate-500">{label}</span><span className="text-left font-bold text-slate-200">{value}</span></div>}
-function PartForm({add}:{add:(p:Part)=>void}){const [f,setF]=useState({name:'',sku:'',qty:'',min:'2',price:''});const change=(k:string,v:string)=>setF(x=>({...x,[k]:v}));return <div className="space-y-3"><label className="block text-xs text-slate-400">اسم القطعة<input className="input mt-2" value={f.name} onChange={e=>change('name',e.target.value)} placeholder="مثال: شاشة iPhone 14"/></label><div className="grid grid-cols-2 gap-3"><label className="text-xs text-slate-400">رمز الصنف<input className="input mt-2" value={f.sku} onChange={e=>change('sku',e.target.value)} placeholder="SCR-014"/></label><label className="text-xs text-slate-400">الكمية<input type="number" min="0" className="input mt-2" value={f.qty} onChange={e=>change('qty',e.target.value)}/></label><label className="text-xs text-slate-400">حد التنبيه<input type="number" min="0" className="input mt-2" value={f.min} onChange={e=>change('min',e.target.value)}/></label><label className="text-xs text-slate-400">سعر الوحدة ($)<input type="number" min="0" className="input mt-2" value={f.price} onChange={e=>change('price',e.target.value)}/></label></div><button onClick={()=>{if(!f.name||!f.sku||!f.qty||!f.price)return;add({id:uid(),name:f.name,sku:f.sku,qty:+f.qty,min:+f.min,price:+f.price})}} className="btn btn-gold w-full"><Plus size={16}/>حفظ القطعة</button></div>}
-function DeskForm({add,staff}:{add:(d:Desk)=>void;staff:Staff[]}){const [name,setName]=useState(''),[tech,setTech]=useState('غير مخصص');return <div className="space-y-3"><label className="block text-xs text-slate-400">اسم الطاولة<input className="input mt-2" placeholder="طاولة 04" value={name} onChange={e=>setName(e.target.value)}/></label><label className="block text-xs text-slate-400">الفني المسؤول<select className="input mt-2" value={tech} onChange={e=>setTech(e.target.value)}><option>غير مخصص</option>{staff.map(s=><option key={s.id}>{s.name}</option>)}</select></label><button onClick={()=>name&&add({id:uid(),name,tech,active:true})} className="btn btn-gold w-full"><Plus size={16}/>إضافة الطاولة</button></div>}
-function TrackModal({device:d,close,now}:{device:Device;close:()=>void;now:number}){const steps:Status[]=['diagnosis','approval','repair','ready'],idx=steps.indexOf(d.status),mins=Math.max(0,Math.ceil((d.expected-now)/60000));return <Modal title="تتبع حالة الإصلاح" close={close}><div className="mx-auto max-w-lg"><div className="mb-5 text-center"><div className="mx-auto mb-3 grid h-14 w-14 place-items-center rounded-2xl bg-gold/10 text-gold"><Smartphone size={25}/></div><div className="text-lg font-black">{d.brand} {d.model}</div><div className="mt-1 text-xs text-slate-500">طلب رقم {d.id}</div><span className={`badge mt-3 ${statusStyle[d.status]}`}>{statusLabel[d.status]}</span></div><div className="mb-5 rounded-xl bg-[#111923] p-4"><div className="mb-2 flex justify-between text-xs"><span className="text-slate-400">تقدم الطلب</span><b className="text-gold">{Math.round((idx+1)/steps.length*100)}%</b></div><div className="flex gap-1">{steps.map((s,i)=><div key={s} className={`h-1.5 flex-1 rounded-full ${i<=idx?'bg-gold':'bg-slate-700'}`}/>)}</div><div className="mt-4 space-y-3">{steps.map((s,i)=><div key={s} className="flex items-center gap-3 text-xs"><span className={`grid h-6 w-6 place-items-center rounded-full ${i<idx?'bg-emerald-500/15 text-emerald-300':i===idx?'bg-gold text-ink':'bg-slate-800 text-slate-500'}`}>{i<idx?<Check size={13}/>:i+1}</span><span className={i<=idx?'text-slate-200':'text-slate-500'}>{statusLabel[s]}</span>{i===idx&&<span className="mr-auto text-[10px] text-gold">الحالة الحالية</span>}</div>)}</div></div><div className="grid grid-cols-2 gap-3"><div className="rounded-xl bg-[#111923] p-3"><div className="text-[10px] text-slate-500">التكلفة التقديرية</div><div className="mt-1 font-bold text-gold">{money(d.cost)}</div></div><div className="rounded-xl bg-[#111923] p-3"><div className="text-[10px] text-slate-500">الوقت المتبقي المتوقع</div><div className="mt-1 font-bold">{d.status==='ready'?'جاهز للاستلام':mins>60?`${Math.floor(mins/60)} ساعة و ${mins%60} دقيقة`:`${mins} دقيقة`}</div></div></div><p className="mt-4 text-center text-[10px] text-slate-500">للاستفسار، تواصل مع ورشة نواة للصيانة</p></div></Modal>}
-function TicketModal({device:d,close,now,desks,assign,approve,update,consume,parts,notify}:{device:Device;close:()=>void;now:number;desks:Desk[];assign:(d:Device,id:string)=>void;approve:(d:Device)=>void;update:(id:string,p:Partial<Device>)=>void;consume:(id:string,p:string)=>void;parts:Part[];notify:(s:string)=>void}){const [desk,setDesk]=useState(''),[services,setServices]=useState<Service[]>(d.services||[]),[sn,setSn]=useState(''),[sp,setSp]=useState(''),[requested,setRequested]=useState(d.requestedParts||[]),[unavailable,setUnavailable]=useState(false),[pn,setPn]=useState(''),[pc,setPc]=useState(''),[rt,setRt]=useState<'normal'|'fast'>(d.repairType||'normal'),[code,setCode]=useState('');const total=services.reduce((n,x)=>n+x.price,0)+requested.reduce((n,x)=>n+x.cost,0)+d.usedParts.reduce((n,name)=>n+(parts.find(p=>p.name===name)?.price||0),0);const assignForApproval=()=>{const bench=desks.find(x=>x.id===desk);if(!bench){notify('اختر طاولة العمل');return}if(!services.length&&!requested.length){notify('أضف خدمة أو قطعة واحدة على الأقل');return}update(d.id,{services,requestedParts:requested,cost:total,desk:bench.name,technician:bench.tech,status:'approval'});notify('تم إرسال السعر للعميل')};const print=()=>{update(d.id,{repairType:rt,cost:total,services,requestedParts:requested});window.print()};return <Modal title={`تفاصيل الطلب · ${d.id}`} close={close}><div className="grid grid-cols-2 gap-4 max-sm:grid-cols-1"><div className="rounded-xl bg-[#111923] p-4"><b>{d.brand} {d.model}</b><div className="mt-3 space-y-2 text-xs"><ReceiptRow label="العميل" value={d.customer}/><ReceiptRow label="الهاتف" value={d.phone}/><ReceiptRow label="رمز/نمط القفل" value={d.passcode||'غير مسجل'}/><ReceiptRow label="العطل" value={d.issue}/><ReceiptRow label="الفني" value={d.technician||'لم يعيّن'}/><ReceiptRow label="الإجمالي" value={money(d.cost)}/></div></div><div className="space-y-3">{d.status==='diagnosis'&&<div className="rounded-xl border border-gold/20 bg-gold/5 p-4"><b className="text-xs text-gold">التشخيص والخدمات</b><textarea className="input mt-3" value={d.diagnosis||''} onChange={e=>update(d.id,{diagnosis:e.target.value})} placeholder="نتيجة التشخيص"/><div className="mt-3 grid grid-cols-[1fr_100px_auto] gap-2"><input className="input" value={sn} onChange={e=>setSn(e.target.value)} placeholder="اسم الخدمة"/><input className="input" type="number" value={sp} onChange={e=>setSp(e.target.value)} placeholder="السعر"/><button className="btn btn-muted" onClick={()=>{if(sn&&sp){setServices([...services,{name:sn,price:+sp}]);setSn('');setSp('')}}}><Plus size={15}/></button></div>{services.map((x,i)=><div key={i} className="mt-2 flex justify-between text-xs">{x.name}<span>{money(x.price)} <button className="text-rose-300" onClick={()=>setServices(services.filter((_,n)=>n!==i))}>×</button></span></div>)}<label className="mt-4 flex gap-2 text-xs"><input type="checkbox" checked={unavailable} onChange={e=>setUnavailable(e.target.checked)}/>القطعة المطلوبة غير متوفرة</label>{unavailable&&<div className="mt-2 grid grid-cols-2 gap-2"><input className="input" value={pn} onChange={e=>setPn(e.target.value)} placeholder="اسم القطعة"/><input className="input" type="number" value={pc} onChange={e=>setPc(e.target.value)} placeholder="تكلفة القطعة"/><button className="btn btn-muted col-span-2" onClick={()=>{if(pn&&pc){setRequested([...requested,{name:pn,cost:+pc}]);setPn('');setPc('')}}}><Plus size={14}/>إضافة</button></div>}<label className="mt-3 block text-xs">قطع المخزون<select className="input mt-1" defaultValue="" onChange={e=>{const p=parts.find(x=>x.id===e.target.value);if(p&&p.qty){consume(d.id,p.id)}}}><option value="">اختر قطعة</option>{parts.filter(x=>x.qty>0).map(p=><option key={p.id} value={p.id}>{p.name} · {money(p.price)}</option>)}</select></label>{requested.map((p,i)=><div key={i} className="text-xs">{p.name} · {money(p.cost)}</div>)}<div className="mt-3 flex justify-between border-t border-slate-700 pt-3">الإجمالي <b className="text-gold">{money(total)}</b></div><select className="input mt-3" value={desk} onChange={e=>setDesk(e.target.value)}><option value="">اختر طاولة العمل</option>{desks.map(x=><option key={x.id} value={x.id}>{x.name} · {x.tech}</option>)}</select><button onClick={assignForApproval} className="btn btn-gold mt-3 w-full">إرسال إلى بانتظار موافقة العميل</button></div>}{d.status==='approval'&&<div className="rounded-xl border border-gold/20 bg-gold/5 p-4"><b className="text-xs text-gold">موافقة العميل والفاتورة</b><select className="input mt-3" value={rt} onChange={e=>setRt(e.target.value as 'normal'|'fast')}><option value="normal">إصلاح عادي</option><option value="fast">إصلاح سريع</option></select><button onClick={print} className="btn btn-muted mt-3 w-full"><Printer size={15}/>طباعة فاتورة العميل والفني</button><button onClick={()=>{update(d.id,{repairType:rt,approved:true});notify('تم تسجيل موافقة العميل، ينتظر الفني إدخال الرمز')}} className="btn btn-gold mt-2 w-full">تأكيد موافقة العميل</button><div className="mt-3 text-xs text-slate-300">رمز الفني: <b className="font-mono tracking-widest text-gold">{d.code}</b></div></div>}{d.status==='repair'&&!d.unlocked&&<div className="rounded-xl border border-gold/30 p-4"><label className="text-xs">رمز الفني لبدء العمل<input className="input mt-2 text-center" maxLength={4} value={code} onChange={e=>setCode(e.target.value)}/></label><button className="btn btn-gold mt-3 w-full" onClick={()=>{if(code===d.code){update(d.id,{unlocked:true});notify('تم التحقق وبدء الإصلاح')}else notify('رمز غير صحيح')}}>بدء الإصلاح</button></div>}{d.status==='ready'&&<button onClick={()=>window.open(`https://wa.me/${d.phone.replace(/\D/g,'')}?text=${encodeURIComponent(`مرحباً ${d.customer}، جهازك ${d.brand} ${d.model} أصبح جاهزاً للاستلام. رقم الطلب ${d.id}.`)}`,'_blank','noopener,noreferrer')} className="btn w-full bg-emerald-950 text-emerald-300"><MessageCircle size={15}/>إشعار واتساب</button>}</div></div><div className="mt-4 rounded-xl border border-slate-700 p-3 text-xs">رمز الفني: <b className="font-mono tracking-widest text-gold">{d.code}</b></div><div className="print-invoice"><section><h1>نواة للصيانة · فاتورة العميل</h1><p>رقم الطلب: {d.id} · العميل: {d.customer} · الجهاز: {d.brand} {d.model}</p><QRCodeSVG value={typeof window!=='undefined'?window.location.origin+'/?track='+d.id:d.id} size={110}/><h3>قطع الغيار</h3>{[...(d.requestedParts||[]),...(d.usedParts||[]).map(n=>({name:n,cost:parts.find(p=>p.name===n)?.price||0}))].map((p,i)=><p key={i}>{p.name} — {money(p.cost)}</p>)}<h3>الخدمات</h3>{services.map((x,i)=><p key={i}>{x.name} — {money(x.price)}</p>)}<h2>الإجمالي: {money(total)}</h2></section><section><h1>نسخة الفني</h1><p>الجهاز: {d.brand} {d.model} · {d.id}</p><p>الفني: {d.technician||'غير مسند'}</p><h2>رمز البدء</h2><strong style={{fontSize:36,letterSpacing:12}}>{d.code}</strong><p>نوع الإصلاح: {rt==='fast'?'سريع':'عادي'}</p></section></div></Modal>}
