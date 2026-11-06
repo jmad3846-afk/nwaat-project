@@ -25,7 +25,12 @@ export type Ticket = {
   delivery_due_at: string | null;
   device_passcode?: string;
 };
-export type Desk = { id: number; name: string; active: boolean };
+export type Desk = {
+  id: number;
+  name: string;
+  active: boolean;
+  active_technician?: Pick<User, "id" | "name" | "email"> | null;
+};
 export type Part = {
   id: number;
   name: string;

@@ -574,41 +574,100 @@ export default function Home() {
                 await api("/desks", "POST", v);
               })}
             >
-              <h2 className="text-xl font-bold">إضافة طاولة</h2>
+              <h2 className="text-xl font-bold">إضافة طاولة وفني</h2>
               <Field label="اسم الطاولة" name="name" required />
+              <div className="form-grid">
+                <Field label="اسم الفني" name="technician_name" required />
+                <Field
+                  label="البريد الإلكتروني للفني"
+                  name="technician_email"
+                  type="email"
+                  required
+                />
+                <Field
+                  label="كلمة مرور الفني (12 حرفاً على الأقل)"
+                  name="technician_password"
+                  type="password"
+                  required
+                />
+              </div>
               <button disabled={busy} className="btn btn-gold">
-                إضافة
+                إضافة الطاولة والفني
               </button>
             </form>
             <section className="glass p-6 space-y-3">
               <h2 className="text-xl font-bold">طاولات العمل</h2>
               {desks.map((d) => (
                 <form
-                  className="flex gap-3 items-center"
+                  className="glass p-4 space-y-3"
                   key={d.id}
                   onSubmit={form(async (v) => {
-                    await api(`/desks/${d.id}`, "PUT", {
-                      name: v.name,
+                    const updates: Record<string, string | boolean> = {
+                      name: String(v.name),
                       active: v.active === "on",
-                    });
+                    };
+                    if (
+                      v.technician_name ||
+                      v.technician_email ||
+                      v.technician_password
+                    ) {
+                      if (v.technician_name)
+                        updates.technician_name = String(v.technician_name);
+                      if (v.technician_email)
+                        updates.technician_email = String(v.technician_email);
+                      if (v.technician_password)
+                        updates.technician_password = String(
+                          v.technician_password,
+                        );
+                    }
+                    await api(`/desks/${d.id}`, "PUT", updates);
                   })}
                 >
-                  <input
-                    aria-label="اسم الطاولة"
-                    name="name"
-                    className="input flex-1"
-                    defaultValue={d.name}
-                  />
-                  <label className="flex gap-2">
+                  <div className="flex gap-3 items-center">
                     <input
-                      name="active"
-                      type="checkbox"
-                      defaultChecked={d.active}
+                      aria-label="اسم الطاولة"
+                      name="name"
+                      className="input flex-1"
+                      defaultValue={d.name}
                     />
-                    نشطة
-                  </label>
+                    <label className="flex gap-2">
+                      <input
+                        name="active"
+                        type="checkbox"
+                        defaultChecked={d.active}
+                      />
+                      نشطة
+                    </label>
+                  </div>
+                  {d.active && (
+                    <div className="form-grid">
+                      <Field
+                        label="اسم الفني"
+                        name="technician_name"
+                        defaultValue={d.active_technician?.name || ""}
+                        required={!d.active_technician}
+                      />
+                      <Field
+                        label="البريد الإلكتروني للفني"
+                        name="technician_email"
+                        type="email"
+                        defaultValue={d.active_technician?.email || ""}
+                        required={!d.active_technician}
+                      />
+                      <Field
+                        label={
+                          d.active_technician
+                            ? "كلمة مرور جديدة (اختياري، 12 حرفاً على الأقل)"
+                            : "كلمة مرور الفني (12 حرفاً على الأقل)"
+                        }
+                        name="technician_password"
+                        type="password"
+                        required={!d.active_technician}
+                      />
+                    </div>
+                  )}
                   <button disabled={busy} className="btn btn-muted">
-                    حفظ
+                    حفظ الطاولة والفني
                   </button>
                 </form>
               ))}
