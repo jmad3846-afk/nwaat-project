@@ -22,7 +22,11 @@ export type Ticket = {
   parts_cost: string;
   approved_at: string | null;
   unlocked_at: string | null;
+  repair_started_at: string | null;
   delivery_due_at: string | null;
+  timer_remaining_seconds: number | null;
+  desk_id?: number | null;
+  technician_id?: number | null;
   device_passcode?: string;
 };
 export type Desk = {
@@ -39,6 +43,60 @@ export type Part = {
   stock_quantity: number;
   minimum_warning_limit: number;
   unit_cost: string;
+  sale_price: string;
+};
+export type Cashbox = {
+  usd: number;
+  syp: number;
+  transactions: Array<{
+    id: number;
+    box: "USD" | "SYP";
+    direction: "IN" | "OUT";
+    category: string;
+    amount: string;
+    exchange_rate: string;
+    description: string | null;
+  }>;
+};
+export type ProfitReport = {
+  sales_revenue: number;
+  sales_cost: number;
+  repair_revenue: number;
+  repair_parts_cost: number;
+  expenses_and_wages: number;
+  gross_profit: number;
+  net_profit: number;
+};
+export type AccountingInvoice = {
+  id: number;
+  type: "purchase" | "sale" | "purchase_return" | "sale_return" | "repair";
+  invoice_number: string | null;
+  counterparty_name: string | null;
+  original_invoice_id: number | null;
+  currency: "USD" | "SYP";
+  exchange_rate: string;
+  total: string;
+  total_usd: string;
+  created_at: string;
+  lines: Array<{
+    inventory_item_id: number;
+    quantity: number;
+    unit_price: string;
+    line_total: string;
+    item?: Pick<Part, "id" | "name" | "sku">;
+  }>;
+};
+export type RewardProgress = {
+  id: number;
+  name: string;
+  email?: string;
+  desk_id: number | null;
+  desk_name?: string | null;
+  completed: number;
+  target: number;
+  progress: number;
+  remaining: number;
+  close: boolean;
 };
 const KEY = "nwaat-auth-token";
 export const token = {
@@ -52,7 +110,9 @@ export async function api<T>(
   body?: unknown,
   publicRequest = false,
 ): Promise<T> {
-  const credential = token.get(),
+  const credential = token.get();
+  let response: Response;
+  try {
     response = await fetch(
       `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api"}${path}`,
       {
@@ -69,6 +129,19 @@ export async function api<T>(
         signal: AbortSignal.timeout(15000),
       },
     );
+  } catch (e) {
+    if (e instanceof DOMException && e.name === "TimeoutError") {
+      throw new Error(
+        "انتهت مهلة الاتصال بالخادم. شغّل backend باستخدام start-api.ps1 ثم أعد المحاولة.",
+      );
+    }
+    if (e instanceof TypeError) {
+      throw new Error(
+        "تعذر الاتصال بالخادم. تأكد من تشغيل MySQL وLaravel باستخدام start-api.ps1.",
+      );
+    }
+    throw e;
+  }
   if (response.status === 401 && !publicRequest) {
     token.clear();
     window.dispatchEvent(new Event("nwaat:unauthorized"));
@@ -101,6 +174,7 @@ export const labels: Record<string, string> = {
   pending_diagnosis: "قيد التشخيص",
   awaiting_customer_approval: "بانتظار موافقة العميل",
   assigned_to_desk: "مسند إلى الطاولة",
+  awaiting_parts: "بانتظار قطعة",
   in_repair: "قيد الإصلاح",
   ready_for_delivery: "جاهز للتسليم",
   delivered: "تم التسليم",

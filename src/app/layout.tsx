@@ -17,6 +17,10 @@ const mono = JetBrains_Mono({
   display: "swap",
 });
 
+// Applies the saved theme before first paint so there is no flash of the
+// wrong colour scheme while React hydrates.
+const themeInit = `try{var t=localStorage.getItem("nwaat-theme");if(t!=="light"&&t!=="dark"){t=window.matchMedia("(prefers-color-scheme: light)").matches?"light":"dark";}document.documentElement.dataset.theme=t;}catch(e){document.documentElement.dataset.theme="dark";}`;
+
 export const metadata: Metadata = {
   title: "نواة | إدارة ورشة الصيانة",
   description: "نظام إدارة ورشة صيانة الهواتف المحمولة",
@@ -25,7 +29,10 @@ export default function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="ar" dir="rtl">
+    <html lang="ar" dir="rtl" suppressHydrationWarning>
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: themeInit }} />
+      </head>
       <body className={`${cairo.variable} ${inter.variable} ${mono.variable}`}>
         {children}
       </body>

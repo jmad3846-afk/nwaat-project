@@ -61,11 +61,14 @@ export default function TrackingPage({
               {labels[data.status]}
             </span>
             <p>
-              التكلفة التقديرية: <b className="text-gold">{money(data.cost)}</b>
+              التكلفة التقديرية:{" "}
+              <b className="text-gold money">{money(data.cost)}</b>
             </p>
             <p>
               الوقت المتبقي:{" "}
-              {data.remaining_seconds === null
+              {data.status === "awaiting_parts"
+                ? "متوقف — بانتظار قطعة"
+                : data.remaining_seconds === null
                 ? "لم يحدد بعد"
                 : `${Math.ceil(data.remaining_seconds / 60)} دقيقة`}
             </p>
